@@ -83,97 +83,78 @@ class Case1Solver:
         opp_idx = (base_idx + 2) % 3
         valid_phis = []
 
+        # 判断1：矩形边类型
         if rect_edge in ['bottom', 'top']:
             t1, t2 = self.t[p1_idx], self.t[p2_idx]
             theta1, theta2 = self.theta[p1_idx], self.theta[p2_idx]
             
-            # 详细记录方程构造过程
-            self._log("    Solving equation: t1*sin(phi+theta1) = t2*sin(phi+theta2)")
-            self._log("    Using trigonometric identity: A*sin(phi) + B*cos(phi) = 0")
-            
             A = t1 * math.cos(theta1) - t2 * math.cos(theta2)
-            self._log_math(f"A = t1*cos(theta1) - t2*cos(theta2) = {t1}*cos({theta1}) - {t2}*cos({theta2})", A)
-            
             B = t1 * math.sin(theta1) - t2 * math.sin(theta2)
-            self._log_math(f"B = t1*sin(theta1) - t2*sin(theta2) = {t1}*sin({theta1}) - {t2}*sin({theta2})", B)
+            self._log_math(f"A = {t1}*cos({theta1}) - {t2}*cos({theta2})", A)
+            self._log_math(f"B = {t1}*sin({theta1}) - {t2}*sin({theta2})", B)
 
+            # 判断2：退化情况
             if abs(A) < 1e-6 and abs(B) < 1e-6:
-                self._log("    Degenerate case (A and B both near zero)")
+                self._log("    Degenerate case (A and B both zero)")
                 return []
-
-            base_phi = math.atan2(-B, A)
-            self._log_math(f"base_phi = atan2(-B, A) = atan2(-{B}, {A})", base_phi)
+                
+            # 判断3：A≈0的特殊情况
+            elif abs(A) < 1e-6:
+                self._log("    Special case (Aappx0): direct solution Phi=+-pi/2")
+                base_phi = math.copysign(math.pi/2, -B)
+                candidates = [base_phi, base_phi + math.pi]
+                
+            # 判断4：常规情况
+            else:
+                base_phi = math.atan2(-B, A)
+                candidates = [base_phi, base_phi + math.pi, base_phi - math.pi]
             
-            candidates = [base_phi, base_phi + math.pi, base_phi - math.pi]
             x_const = 0 if adj_edge == 'left' else self.m
+            return self._validate_phi_candidates(candidates, t1, theta1, opp_idx, x_const, rect_edge)
 
-            for phi in candidates:
-                try:
-                    # 验证第三顶点坐标
-                    x_opp = self.t[opp_idx] * math.cos(phi + self.theta[opp_idx])
-                    self._log_math(f"x_opp = t{opp_idx}*cos(phi + theta{opp_idx}) = {self.t[opp_idx]}*cos({phi} + {self.theta[opp_idx]})", x_opp)
-                    
-                    if not self._log_compare(x_opp, x_const):
-                        continue
-                    
-                    # 验证基底顶点坐标
-                    yO = -t1 * math.sin(phi + theta1)
-                    self._log_math(f"yO = -t1*sin(phi + theta1) = -{t1}*sin({phi} + {theta1})", yO)
-                    
-                    target_y = 0 if rect_edge == 'bottom' else self.n
-                    if not self._log_compare(yO, target_y):
-                        continue
-                    
-                    valid_phis.append(phi)
-                except Exception as e:
-                    self._log(f"    Error in phi candidate {phi}: {str(e)}")
-                    continue
-
-        else:  # 垂直边处理
+        else:  # 垂直边处理（结构相同，方程不同）
             t1, t2 = self.t[p1_idx], self.t[p2_idx]
             theta1, theta2 = self.theta[p1_idx], self.theta[p2_idx]
             
-            self._log("    Solving equation: t1*cos(phi+theta1) = t2*cos(phi+theta2)")
-            self._log("    Using trigonometric identity: A*cos(phi) - B*sin(phi) = 0")
-            
             A = t1 * math.sin(theta1) - t2 * math.sin(theta2)
-            self._log_math(f"A = t1*sin(theta1) - t2*sin(theta2) = {t1}*sin({theta1}) - {t2}*sin({theta2})", A)
-            
             B = t1 * math.cos(theta1) - t2 * math.cos(theta2)
-            self._log_math(f"B = t1*cos(theta1) - t2*cos(theta2) = {t1}*cos({theta1}) - {t2}*cos({theta2})", B)
+            self._log_math(f"A = {t1}*sin({theta1}) - {t2}*sin({theta2})", A)
+            self._log_math(f"B = {t1}*cos({theta1}) - {t2}*cos({theta2})", B)
 
             if abs(A) < 1e-6 and abs(B) < 1e-6:
-                self._log("    Degenerate case (A and B both near zero)")
+                self._log("    Degenerate case (A and B both zero)")
                 return []
-
-            base_phi = math.atan2(B, -A)
-            self._log_math(f"base_phi = atan2(B, -A) = atan2({B}, -{A})", base_phi)
+                
+            elif abs(A) < 1e-6:
+                self._log("    Special case (Aappx0): direct solution Phi=0 or π")
+                base_phi = 0 if B > 0 else math.pi
+                candidates = [base_phi, base_phi + math.pi]
+                
+            else:
+                base_phi = math.atan2(B, -A)
+                candidates = [base_phi, base_phi + math.pi, base_phi - math.pi]
             
-            candidates = [base_phi, base_phi + math.pi, base_phi - math.pi]
             y_const = 0 if adj_edge == 'bottom' else self.n
+            return self._validate_phi_candidates(candidates, t1, theta1, opp_idx, y_const, rect_edge, is_vertical=True)
 
-            for phi in candidates:
-                try:
-                    # 验证第三顶点坐标
-                    y_opp = self.t[opp_idx] * math.sin(phi + self.theta[opp_idx])
-                    self._log_math(f"y_opp = t{opp_idx}*sin(phi + theta{opp_idx}) = {self.t[opp_idx]}*sin({phi} + {self.theta[opp_idx]})", y_opp)
-                    
-                    if not self._log_compare(y_opp, y_const):
-                        continue
-                    
-                    # 验证基底顶点坐标
-                    xO = -t1 * math.cos(phi + theta1)
-                    self._log_math(f"xO = -t1*cos(phi + theta1) = -{t1}*cos({phi} + {theta1})", xO)
-                    
-                    target_x = 0 if rect_edge == 'left' else self.m
-                    if not self._log_compare(xO, target_x):
-                        continue
-                    
-                    valid_phis.append(phi)
-                except Exception as e:
-                    self._log(f"    Error in phi candidate {phi}: {str(e)}")
+    def _validate_phi_candidates(self, candidates, t1, theta1, opp_idx, const, rect_edge, is_vertical=False):
+        valid_phis = []
+        for phi in candidates:
+            try:
+                # 验证对角顶点
+                coord = self.t[opp_idx] * (math.cos if not is_vertical else math.sin)(phi + self.theta[opp_idx])
+                if not self._log_compare(coord, const):
                     continue
-
+                    
+                # 验证基底顶点
+                base_coord = -t1 * (math.sin if not is_vertical else math.cos)(phi + theta1)
+                target = 0 if rect_edge in ['bottom', 'left'] else (self.n if is_vertical else self.m)
+                if not self._log_compare(base_coord, target):
+                    continue
+                    
+                valid_phis.append(phi)
+            except Exception as e:
+                self._log(f"    Error in phi candidate {phi}: {str(e)}")
         return valid_phis
     
     def _compute_position(self, base_idx: int, rect_edge: str, adj_edge: str, phi: float) -> Tuple[float, float]:
@@ -274,14 +255,14 @@ def main():
     with open('detailed_solver_output.txt', 'w') as f:
         sys.stdout = f
         
-        print("\n=== TEST CASE 1 (3-4-5 right triangle) ===")
-        test_case1 = Case1Solver(
-            t=[3.0, 4.0, 5.0],
-            theta=[0.0, math.pi/2, math.atan2(4, 3)],
-            m=3.0,
-            n=4.0
+        print("\n=== TEST CASE (Corrected) ===")
+        test_case = Case1Solver(
+            t=[2.0, 2*math.sqrt(2), 2.0],  # 点O到三个顶点的距离
+            theta=[0.0, math.pi/4, math.pi/2],  # 三个向量与基准方向的夹角
+            m=4.0,  # 矩形宽度
+            n=4.0   # 矩形高度
         )
-        solutions = test_case1.solve()
+        solutions = test_case.solve()
         
         print("\n=== SOLUTIONS ===")
         for i, (xO, yO, phi) in enumerate(solutions, 1):
@@ -289,10 +270,22 @@ def main():
             print(f"O = ({xO:.6f}, {yO:.6f})")
             print(f"phi = {phi:.6f} rad ({math.degrees(phi):.2f}°)")
             
+            # 计算并打印所有顶点坐标
+            vertices = []
             for j in range(3):
-                x = xO + test_case1.t[j] * math.cos(phi + test_case1.theta[j])
-                y = yO + test_case1.t[j] * math.sin(phi + test_case1.theta[j])
+                x = xO + test_case.t[j] * math.cos(phi + test_case.theta[j])
+                y = yO + test_case.t[j] * math.sin(phi + test_case.theta[j])
+                vertices.append((x, y))
                 print(f"P{j} = ({x:.6f}, {y:.6f})")
+            
+            # 验证三角形边长（辅助检查）
+            def distance(a, b):
+                return math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2)
+            
+            print("\nTriangle side lengths:")
+            print(f"P0-P1: {distance(vertices[0], vertices[1]):.6f}")
+            print(f"P1-P2: {distance(vertices[1], vertices[2]):.6f}")
+            print(f"P2-P0: {distance(vertices[2], vertices[0]):.6f}")
     
     sys.stdout = original_stdout
     print("Complete output saved to detailed_solver_output.txt")
