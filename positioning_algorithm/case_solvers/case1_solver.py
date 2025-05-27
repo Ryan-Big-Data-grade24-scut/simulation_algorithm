@@ -20,9 +20,14 @@ class Case1Solver:
         print(message)
         self.log_file.write(message + "\n")
     
-    def _log_math(self, operation: str, result: float):
+    def _log_math(self, operation: str, result):
         """Log detailed math operation"""
-        self._log(f"[MATH] {operation} = {result:.8f}")
+        if type(result) == tuple:
+            self._log("loging Tuple")
+            self._log(f"[MATH] {operation} = ({result[0]:.8f}, {result[1]:.8f})")
+        else:    
+            self._log("loging Float")
+            self._log(f"[MATH] {operation} = {result:.8f}")
     
     def _log_compare(self, a: float, b: float, tol: float = 1e-6):
         """Log comparison with tolerance"""
@@ -70,7 +75,7 @@ class Case1Solver:
                             else:
                                 self._log("    Solution failed verification")
                                 
-                    except (ValueError, AssertionError) as e:
+                    except (ValueError, AssertionError, TypeError) as e:
                         self._log(f"    Failed with error: {str(e)}")
                         continue
         
@@ -109,9 +114,15 @@ class Case1Solver:
                 base_phi = math.atan2(-B, A)
                 candidates = [base_phi, base_phi + math.pi, base_phi - math.pi]
             
-            x_const = 0 if adj_edge == 'left' else self.m
-            return self._validate_phi_candidates(candidates, t1, theta1, opp_idx, x_const, rect_edge)
-
+            return self._validate_phi_candidates(
+                    candidates=candidates,
+                    t1=t1,
+                    theta1=theta1,
+                    opp_idx=opp_idx,
+                    rect_edge=rect_edge,
+                    adj_edge=adj_edge,
+                    is_vertical=False
+                )
         else:  # 垂直边处理（结构相同，方程不同）
             t1, t2 = self.t[p1_idx], self.t[p2_idx]
             theta1, theta2 = self.theta[p1_idx], self.theta[p2_idx]
@@ -126,7 +137,7 @@ class Case1Solver:
                 return []
                 
             elif abs(A) < 1e-6:
-                self._log("    Special case (Aappx0): direct solution Phi=0 or π")
+                self._log("    Special case (Aappx0): direct solution Phi=0 or pi")
                 base_phi = 0 if B > 0 else math.pi
                 candidates = [base_phi, base_phi + math.pi]
                 
@@ -134,27 +145,134 @@ class Case1Solver:
                 base_phi = math.atan2(B, -A)
                 candidates = [base_phi, base_phi + math.pi, base_phi - math.pi]
             
-            y_const = 0 if adj_edge == 'bottom' else self.n
-            return self._validate_phi_candidates(candidates, t1, theta1, opp_idx, y_const, rect_edge, is_vertical=True)
-
-    def _validate_phi_candidates(self, candidates, t1, theta1, opp_idx, const, rect_edge, is_vertical=False):
+                return self._validate_phi_candidates(
+                        candidates=candidates,
+                        t1=t1,
+                        theta1=theta1,
+                        opp_idx=opp_idx,
+                        rect_edge=rect_edge,
+                        adj_edge=adj_edge,
+                        is_vertical=True
+                    )
+            
+    def _validate_phi_candidates(self, candidates, t1, theta1, opp_idx, rect_edge, adj_edge, is_vertical=False):
         valid_phis = []
+        TOL = 1e-6  # Tolerance constant
+        
         for phi in candidates:
             try:
-                # 验证对角顶点
-                coord = self.t[opp_idx] * (math.cos if not is_vertical else math.sin)(phi + self.theta[opp_idx])
-                if not self._log_compare(coord, const):
+                self._log(f"\n=== Validating phi = {phi:.8f} ===")
+                
+                # Calculate relative coordinates (origin at O)
+                P = []
+                for i in range(3):
+                    x = self.t[i] * math.cos(phi + self.theta[i])
+                    y = self.t[i] * math.sin(phi + self.theta[i])
+                    P.append((x, y))
+                    self._log(f"P{i} = ({x:.8f}, {y:.8f})")
+                
+                # 1. Base edge alignment check
+                self._log("\n[Base Edge Validation]")
+                if rect_edge in ['bottom', 'top']:
+                    # Check if base edge is horizontal
+                    dy = abs(P[1][1] - P[0][1])
+                    self._log(f"Vertical diff dy = {dy:.8f} (req < {TOL:.1e})")
+                    if dy >= TOL:
+                        self._log("-> Base not horizontal, skip")
+                        continue
+                    
+                    base_y = (P[0][1] + P[1][1]) / 2
+                    self._log(f"Base avg y = {base_y:.8f}")
+                    
+                    # Check third point position
+                    if rect_edge == 'bottom':
+                        cond = P[2][1] > base_y - TOL
+                        self._log(f"P2.y = {P[2][1]:.8f} > {base_y-TOL:.8f}? {'PASS' if cond else 'FAIL'}")
+                        if not cond:
+                            continue
+                    else:  # top
+                        cond = P[2][1] < base_y + TOL
+                        self._log(f"P2.y = {P[2][1]:.8f} < {base_y+TOL:.8f}? {'PASS' if cond else 'FAIL'}")
+                        if not cond:
+                            continue
+                else:  # left/right
+                    # Check if base edge is vertical
+                    dx = abs(P[1][0] - P[0][0])
+                    self._log(f"Horizontal diff dx = {dx:.8f} (req < {TOL:.1e})")
+                    if dx >= TOL:
+                        self._log("-> Base not vertical, skip")
+                        continue
+                    
+                    base_x = (P[0][0] + P[1][0]) / 2
+                    self._log(f"Base avg x = {base_x:.8f}")
+                    
+                    # Check third point position
+                    if rect_edge == 'left':
+                        cond = P[2][0] > base_x - TOL
+                        self._log(f"P2.x = {P[2][0]:.8f} > {base_x-TOL:.8f}? {'PASS' if cond else 'FAIL'}")
+                        if not cond:
+                            continue
+                    else:  # right
+                        cond = P[2][0] < base_x + TOL
+                        self._log(f"P2.x = {P[2][0]:.8f} < {base_x+TOL:.8f}? {'PASS' if cond else 'FAIL'}")
+                        if not cond:
+                            continue
+                
+                # 2. Adjacent edge constraint
+                self._log("\n[Adjacent Edge Check]")
+                if adj_edge == 'left':
+                    p2_x = P[2][0]
+                    min_x = min(P[0][0], P[1][0])
+                    cond = p2_x <= min_x + TOL
+                    self._log(f"P2.x = {p2_x:.8f} <= min(P0.x,P1.x)+tol = {min_x+TOL:.8f}? {'PASS' if cond else 'FAIL'}")
+                    if not cond:
+                        continue
+                elif adj_edge == 'right':
+                    p2_x = P[2][0]
+                    max_x = max(P[0][0], P[1][0])
+                    cond = p2_x >= max_x - TOL
+                    self._log(f"P2.x = {p2_x:.8f} >= max(P0.x,P1.x)-tol = {max_x-TOL:.8f}? {'PASS' if cond else 'FAIL'}")
+                    if not cond:
+                        continue
+                elif adj_edge == 'bottom':
+                    p2_y = P[2][1]
+                    min_y = min(P[0][1], P[1][1])
+                    cond = p2_y <= min_y + TOL
+                    self._log(f"P2.y = {p2_y:.8f} <= min(P0.y,P1.y)+tol = {min_y+TOL:.8f}? {'PASS' if cond else 'FAIL'}")
+                    if not cond:
+                        continue
+                elif adj_edge == 'top':
+                    p2_y = P[2][1]
+                    max_y = max(P[0][1], P[1][1])
+                    cond = p2_y >= max_y - TOL
+                    self._log(f"P2.y = {p2_y:.8f} >= max(P0.y,P1.y)-tol = {max_y-TOL:.8f}? {'PASS' if cond else 'FAIL'}")
+                    if not cond:
+                        continue
+                
+                # 3. Translation feasibility
+                self._log("\n[Translation Check]")
+                min_x = min(p[0] for p in P)
+                max_x = max(p[0] for p in P)
+                min_y = min(p[1] for p in P)
+                max_y = max(p[1] for p in P)
+                self._log(f"X range: [{min_x:.8f}, {max_x:.8f}] (rect width={self.m:.1f})")
+                self._log(f"Y range: [{min_y:.8f}, {max_y:.8f}] (rect height={self.n:.1f})")
+                
+                width_ok = (max_x - min_x) <= (self.m + TOL)
+                height_ok = (max_y - min_y) <= (self.n + TOL)
+                
+                self._log(f"Width check: {max_x-min_x:.8f} <= {self.m+TOL:.8f}? {'PASS' if width_ok else 'FAIL'}")
+                self._log(f"Height check: {max_y-min_y:.8f} <= {self.n+TOL:.8f}? {'PASS' if height_ok else 'FAIL'}")
+                
+                if not (width_ok and height_ok):
                     continue
                     
-                # 验证基底顶点
-                base_coord = -t1 * (math.sin if not is_vertical else math.cos)(phi + theta1)
-                target = 0 if rect_edge in ['bottom', 'left'] else (self.n if is_vertical else self.m)
-                if not self._log_compare(base_coord, target):
-                    continue
-                    
+                self._log("*** ALL VALIDATIONS PASSED ***")
                 valid_phis.append(phi)
+                
             except Exception as e:
-                self._log(f"    Error in phi candidate {phi}: {str(e)}")
+                self._log(f"!!! Validation error: {str(e)}")
+        
         return valid_phis
     
     def _compute_position(self, base_idx: int, rect_edge: str, adj_edge: str, phi: float) -> Tuple[float, float]:
