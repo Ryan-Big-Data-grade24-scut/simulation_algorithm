@@ -303,25 +303,31 @@ class Case1Solver:
         opp_idx = (base_idx + 2) % 3
 
         if rect_edge in ['bottom', 'top']:
-            yO = -self.t[p1_idx] * math.sin(phi + self.theta[p1_idx])
-            self._log_math(f"yO = -t{p1_idx}*sin(phi + theta{p1_idx}) = -{self.t[p1_idx]}*sin({phi} + {self.theta[p1_idx]})", yO)
+            # yO计算：基底点对齐bottom(y=0)或top(y=n)
+            y_target = 0 if rect_edge == 'bottom' else self.n
+            yO = y_target - self.t[p1_idx] * math.sin(phi + self.theta[p1_idx])
+            self._log_math(f"yO = {y_target} - t{p1_idx}*sin(phi + theta{p1_idx}) = {y_target} - {self.t[p1_idx]}*sin({phi} + {self.theta[p1_idx]})", yO)
             
-            x_const = 0 if adj_edge == 'left' else self.m
+            # xO计算：对角点对齐left(x=0)或right(x=m)
+            x_target = 0 if adj_edge == 'left' else self.m
             x_opp = self.t[opp_idx] * math.cos(phi + self.theta[opp_idx])
             self._log_math(f"x_opp = t{opp_idx}*cos(phi + theta{opp_idx}) = {self.t[opp_idx]}*cos({phi} + {self.theta[opp_idx]})", x_opp)
             
-            xO = x_const - x_opp
-            self._log_math(f"xO = {x_const} - x_opp = {x_const} - {x_opp}", xO)
+            xO = x_target - x_opp
+            self._log_math(f"xO = {x_target} - x_opp = {x_target} - {x_opp}", xO)
         else:
-            xO = -self.t[p1_idx] * math.cos(phi + self.theta[p1_idx])
-            self._log_math(f"xO = -t{p1_idx}*cos(phi + theta{p1_idx}) = -{self.t[p1_idx]}*cos({phi} + {self.theta[p1_idx]})", xO)
+            # xO计算：基底点对齐left(x=0)或right(x=m)
+            x_target = 0 if rect_edge == 'left' else self.m
+            xO = x_target - self.t[p1_idx] * math.cos(phi + self.theta[p1_idx])
+            self._log_math(f"xO = {x_target} - t{p1_idx}*cos(phi + theta{p1_idx}) = {x_target} - {self.t[p1_idx]}*cos({phi} + {self.theta[p1_idx]})", xO)
             
-            y_const = 0 if adj_edge == 'bottom' else self.n
+            # yO计算：对角点对齐bottom(y=0)或top(y=n)
+            y_target = 0 if adj_edge == 'bottom' else self.n
             y_opp = self.t[opp_idx] * math.sin(phi + self.theta[opp_idx])
             self._log_math(f"y_opp = t{opp_idx}*sin(phi + theta{opp_idx}) = {self.t[opp_idx]}*sin({phi} + {self.theta[opp_idx]})", y_opp)
             
-            yO = y_const - y_opp
-            self._log_math(f"yO = {y_const} - y_opp = {y_const} - {y_opp}", yO)
+            yO = y_target - y_opp
+            self._log_math(f"yO = {y_target} - y_opp = {y_target} - {y_opp}", yO)
 
         return xO, yO
     
