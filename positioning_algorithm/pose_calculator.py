@@ -4,7 +4,7 @@ from queue import Queue
 from typing import List, Dict, Any, Optional, Tuple
 from .case_solvers.case1_solver_logger import Case1Solver
 from .case_solvers.case2_solver_logger import Case2Solver
-from .case_solvers.case3_solver import Case3Solver
+from .case_solvers.case3_solver_logger import Case3Solver
 from itertools import combinations
 
 class PoseCalculator():
@@ -96,6 +96,8 @@ class PoseCalculator():
             """
             
             # 情况3：三个顶点在三条边上
+            self.case3_solver.t = t1
+            self.case3_solver.theta = theta1
             solutions_case3 = self.case3_solver.solve()
             for sol in solutions_case3:
                 xforms.put((sol[:2], sol[2]))

@@ -188,42 +188,59 @@ class Case3Solver:
     def _compute_position(self, phi, p0, p1, p2, p0_edge, p1_edge, p2_edge):
         """计算中心点坐标"""
         self._log(f"\n    [Computing position for phi={phi:.6f}]")
-        xO, yO = 0, 0
+        xO, yO = None, None  # 初始化为None，表示尚未计算
+        x_values = []  # 存储所有计算出的xO值
+        y_values = []  # 存储所有计算出的yO值
         
-        # 根据第一个顶点的约束计算中心
-        if p0_edge == 'left':
-            xO = -self.t[p0] * cos(phi + self.theta[p0])
-            self._log_math(f"xO = -t{p0}*cos(phi + theta{p0})", xO)
-        elif p0_edge == 'right':
-            xO = self.m - self.t[p0] * cos(phi + self.theta[p0])
-            self._log_math(f"xO = m - t{p0}*cos(phi + theta{p0})", xO)
-        elif p0_edge == 'top':
-            yO = self.n - self.t[p0] * sin(phi + self.theta[p0])
-            self._log_math(f"yO = n - t{p0}*sin(phi + theta{p0})", yO)
-        elif p0_edge == 'bottom':
-            yO = -self.t[p0] * sin(phi + self.theta[p0])
-            self._log_math(f"yO = -t{p0}*sin(phi + theta{p0})", yO)
+        # 根据顶点约束计算可能的中心坐标
+        def process_edge(vertex, edge, step_name):
+            nonlocal xO, yO
+            if edge == 'left':
+                new_x = -self.t[vertex] * cos(phi + self.theta[vertex])
+                self._log(f"    {step_name}: xO = -t{vertex}*cos(phi + theta{vertex}) = {new_x:.6f}")
+                x_values.append(new_x)
+            elif edge == 'right':
+                new_x = self.m - self.t[vertex] * cos(phi + self.theta[vertex])
+                self._log(f"    {step_name}: xO = m - t{vertex}*cos(phi + theta{vertex}) = {new_x:.6f}")
+                x_values.append(new_x)
+            elif edge == 'top':
+                new_y = self.n - self.t[vertex] * sin(phi + self.theta[vertex])
+                self._log(f"    {step_name}: yO = n - t{vertex}*sin(phi + theta{vertex}) = {new_y:.6f}")
+                y_values.append(new_y)
+            elif edge == 'bottom':
+                new_y = -self.t[vertex] * sin(phi + self.theta[vertex])
+                self._log(f"    {step_name}: yO = -t{vertex}*sin(phi + theta{vertex}) = {new_y:.6f}")
+                y_values.append(new_y)
         
-        # 根据第二个顶点的约束修正（优先使用x约束）
-        if p1_edge == 'left':
-            new_xO = -self.t[p1] * cos(phi + self.theta[p1])
-            self._log(f"    Updating xO from {xO:.6f} to {new_xO:.6f} based on P{p1} on left edge")
-            xO = new_xO
-        elif p1_edge == 'right':
-            new_xO = self.m - self.t[p1] * cos(phi + self.theta[p1])
-            self._log(f"    Updating xO from {xO:.6f} to {new_xO:.6f} based on P{p1} on right edge")
-            xO = new_xO
-        elif p1_edge in ['top', 'bottom'] and p0_edge in ['left', 'right']:
-            # 如果第一个顶点用了x约束，这里用y约束
-            if p1_edge == 'top':
-                new_yO = self.n - self.t[p1] * sin(phi + self.theta[p1])
-                self._log(f"    Updating yO from {yO:.6f} to {new_yO:.6f} based on P{p1} on top edge")
-                yO = new_yO
-            else:
-                new_yO = -self.t[p1] * sin(phi + self.theta[p1])
-                self._log(f"    Updating yO from {yO:.6f} to {new_yO:.6f} based on P{p1} on bottom edge")
-                yO = new_yO
+        # 处理三个顶点的约束
+        process_edge(p0, p0_edge, "Initial calculation from P0")
+        process_edge(p1, p1_edge, "Adjustment from P1")
+        process_edge(p2, p2_edge, "Fine-tuning from P2")
         
+        # 确定最终的xO和yO
+        if len(x_values) > 1:
+            xO = sum(x_values) / len(x_values)
+            self._log(f"    Averaged xO from {len(x_values)} values: {xO:.6f}")
+        elif len(x_values) == 1:
+            xO = x_values[0]
+            self._log(f"    Using single xO value: {xO:.6f}")
+        
+        if len(y_values) > 1:
+            yO = sum(y_values) / len(y_values)
+            self._log(f"    Averaged yO from {len(y_values)} values: {yO:.6f}")
+        elif len(y_values) == 1:
+            yO = y_values[0]
+            self._log(f"    Using single yO value: {yO:.6f}")
+        
+        # 如果某个坐标仍未确定，使用默认值0
+        if xO is None:
+            xO = 0
+            self._log("    No x constraints, defaulting xO to 0")
+        if yO is None:
+            yO = 0
+            self._log("    No y constraints, defaulting yO to 0")
+        
+        self._log(f"\n    Final position: xO={xO:.8f}, yO={yO:.8f}")
         return xO, yO
     
     def _verify_solution(self, xO, yO, phi, p0, p1, p2, p0_edge, p1_edge, p2_edge):
