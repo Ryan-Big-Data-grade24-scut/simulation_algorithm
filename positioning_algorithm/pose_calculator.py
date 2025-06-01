@@ -2,7 +2,8 @@
 import numpy as np
 from queue import Queue
 from typing import List, Dict, Any, Optional, Tuple
-from .case_solvers.case1_solver_logger import Case1Solver
+from .case_solvers.BaseSolver import BaseSolverConfig
+from .case_solvers.case1_solver import Case1Solver
 from .case_solvers.case2_solver_logger import Case2Solver
 from .case_solvers.case3_solver_logger import Case3Solver
 from itertools import combinations
@@ -21,8 +22,10 @@ class PoseCalculator():
         self.n = n
         self.result_list = []
         
+        self.config = BaseSolverConfig(tol=1e-3, log_enabled=True, log_file="solver.log", log_level="INFO")    
+
         # 初始化三个求解器（参数将在calculate_pose中更新）
-        self.case1_solver = Case1Solver([1,1,1], [0,0,0], m, n)
+        self.case1_solver = Case1Solver([1,1,1], [0,0,0], m, n, config=self.config)
         self.case2_solver = Case2Solver([1,1,1], [0,0,0], m, n)
         self.case3_solver = Case3Solver([1,1,1], [0,0,0], m, n)
 
@@ -78,13 +81,16 @@ class PoseCalculator():
             xforms = Queue()
             
             # 情况1：边在底边，对角在邻边
-            """
+            #"""
             self.case1_solver.t = t1
             self.case1_solver.theta = theta1
             solutions_case1 = self.case1_solver.solve()
             for sol in solutions_case1:
-                xforms.put((sol[:2], sol[2]))  # (P, phi)
-            """
+                x1, x2 = sol[0]
+                y1, y2 = sol[1]
+                phi = sol[2]
+                xforms.put((((x1+x2)/2, (y1+y2)/2), phi))  # (P, phi)
+            #"""
             
             # 情况2：边在底边，对角在对边
             """
@@ -96,12 +102,14 @@ class PoseCalculator():
             """
             
             # 情况3：三个顶点在三条边上
+            """
             self.case3_solver.t = t1
             self.case3_solver.theta = theta1
             solutions_case3 = self.case3_solver.solve()
             for sol in solutions_case3:
                 xforms.put((sol[:2], sol[2]))
-                
+            """
+
             results.append((xforms, v_comb))
         return xforms, all_v
     
