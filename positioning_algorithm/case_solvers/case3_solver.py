@@ -1,192 +1,161 @@
-#./positioning_algorithm/case_solvers/case3_solver.py
-import math
-from typing import List, Tuple
+import numpy as np
+from math import sin, cos, atan2, asin, sqrt, pi
 
 class Case3Solver:
-    """Solver for case where three vertices are each on different rectangle edges"""
-    
-    def __init__(self, t: List[float], theta: List[float], m: float, n: float):
+    def __init__(self, t, theta, m, n):
+        """
+        t: 三角形顶点到中心的距离列表 [t0, t1, t2]
+        theta: 三角形顶点角度列表 [θ0, θ1, θ2]（弧度）
+        m: 矩形宽度
+        n: 矩形高度
+        """
         self.t = t
         self.theta = theta
         self.m = m
         self.n = n
+        self.TOL = 1e-6
     
-    def solve(self) -> List[Tuple[float, float, float]]:
+    def solve(self):
+        """处理所有情况3的组合"""
         solutions = []
         
-        # Try all valid edge combinations (3 distinct edges)
+        # 所有可能的边组合（顶点索引分配）
         edge_combinations = [
-            ['left', 'bottom', 'top'],
-            ['left', 'bottom', 'right'],
-            ['left', 'top', 'right'],
-            ['bottom', 'top', 'right'],
-            ['bottom', 'left', 'right'],
-            ['top', 'left', 'right']
+            # (p0_edge, p1_edge, p2_edge)
+            ('left', 'right', 'top'),
+            ('left', 'right', 'bottom'),
+            ('left', 'top', 'bottom'),
+            ('right', 'top', 'bottom')
         ]
         
-        for edges in edge_combinations:
-            for vertex_order in self._get_vertex_orders():
-                try:
-                    phi = self._solve_phi(edges, vertex_order)
-                    xO, yO = self._compute_position(edges, vertex_order, phi)
-                    if self._verify_solution(xO, yO, phi, edges, vertex_order):
+        for p0_edge, p1_edge, p2_edge in edge_combinations:
+            # 尝试所有顶点排列组合（6种排列）
+            for p0, p1, p2 in [(0,1,2), (0,2,1), (1,0,2), (1,2,0), (2,0,1), (2,1,0)]:
+                phi_candidates = self._solve_edge_combo(
+                    p0, p1, p2, p0_edge, p1_edge, p2_edge)
+                
+                for phi in phi_candidates:
+                    xO, yO = self._compute_position(phi, p0, p1, p2, 
+                                                  p0_edge, p1_edge, p2_edge)
+                    if self._verify_solution(xO, yO, phi, p0_edge, p1_edge, p2_edge):
                         solutions.append((xO, yO, phi))
-                except (ValueError, AssertionError, NotImplementedError):
-                    continue
         
         return solutions
     
-    def _get_vertex_orders(self) -> List[List[int]]:
-        """Generate all possible vertex orderings (permutations)"""
-        return [
-            [0, 1, 2],
-            [0, 2, 1],
-            [1, 0, 2],
-            [1, 2, 0],
-            [2, 0, 1],
-            [2, 1, 0]
-        ]
+    def _solve_edge_combo(self, p0, p1, p2, p0_edge, p1_edge, p2_edge):
+        """解特定边组合的方程"""
+        if {p0_edge, p1_edge} == {'left', 'right'}:
+            # 处理left+right+top/bottom的情况
+            A = self.t[p1]*cos(self.theta[p1]) - self.t[p0]*cos(self.theta[p0])
+            B = -(self.t[p1]*sin(self.theta[p1]) - self.t[p0]*sin(self.theta[p0]))
+            C = self.m
+        elif {p0_edge, p1_edge} == {'left', 'top'} and p2_edge == 'bottom':
+            # 处理left+top+bottom的情况（通过p0和p2）
+            A = self.t[p2]*sin(self.theta[p2]) - self.t[p0]*sin(self.theta[p0])
+            B = self.t[p2]*cos(self.theta[p2]) - self.t[p0]*cos(self.theta[p0])
+            C = self.n
+        elif {p0_edge, p1_edge} == {'right', 'top'} and p2_edge == 'bottom':
+            # 处理right+top+bottom的情况（通过p0和p2）
+            A = self.t[p2]*sin(self.theta[p2]) - self.t[p0]*sin(self.theta[p0])
+            B = self.t[p2]*cos(self.theta[p2]) - self.t[p0]*cos(self.theta[p0])
+            C = self.n
+        else:
+            return []
+        
+        # 解 A*cos(phi) + B*sin(phi) = C
+        norm = sqrt(A*A + B*B)
+        if abs(C) > norm + self.TOL:
+            return []  # 无解
+        
+        alpha = atan2(A, B)
+        phi1 = asin(C / norm) - alpha
+        phi2 = pi - asin(C / norm) - alpha
+        
+        # 返回在[-pi, pi]范围内的解
+        solutions = []
+        for phi in [phi1, phi2]:
+            if phi < -pi:
+                phi += 2*pi
+            elif phi > pi:
+                phi -= 2*pi
+            solutions.append(phi)
+        
+        return solutions
     
-    def _solve_phi(self, edges: List[str], vertex_order: List[int]) -> float:
-        """Solve for phi given edge assignments and vertex order"""
-        # Assign edges to vertices based on order
-        edge1, edge2, edge3 = edges
-        v1, v2, v3 = vertex_order
+    def _compute_position(self, phi, p0, p1, p2, p0_edge, p1_edge, p2_edge):
+        """计算中心点坐标"""
+        xO, yO = 0, 0
         
-        # Build equations based on edge assignments
-        equations = []
-        for i, edge in enumerate(edges):
-            vi = vertex_order[i]
-            if edge == 'left':
-                equations.append((vi, 'x', 0))
-            elif edge == 'right':
-                equations.append((vi, 'x', self.m))
-            elif edge == 'bottom':
-                equations.append((vi, 'y', 0))
-            elif edge == 'top':
-                equations.append((vi, 'y', self.n))
+        # 根据第一个顶点的约束计算中心
+        if p0_edge == 'left':
+            xO = -self.t[p0] * cos(phi + self.theta[p0])
+        elif p0_edge == 'right':
+            xO = self.m - self.t[p0] * cos(phi + self.theta[p0])
+        elif p0_edge == 'top':
+            yO = self.n - self.t[p0] * sin(phi + self.theta[p0])
+        elif p0_edge == 'bottom':
+            yO = -self.t[p0] * sin(phi + self.theta[p0])
         
-        # We need at least two equations to solve for phi
-        # Here we implement a specific solver for common cases
-        if edges == ['left', 'bottom', 'top']:
-            # P1 on left (x=0), P2 on bottom (y=0), P3 on top (y=n)
-            v1, v2, v3 = vertex_order
-            t1, t2, t3 = self.t[v1], self.t[v2], self.t[v3]
-            theta1, theta2, theta3 = self.theta[v1], self.theta[v2], self.theta[v3]
-            
-            # Equations:
-            # xO + t1*cos(phi+θ1) = 0
-            # yO + t2*sin(phi+θ2) = 0
-            # yO + t3*sin(phi+θ3) = n
-            
-            # From first equation: xO = -t1*cos(phi+θ1)
-            # From second and third:
-            C = t3 * math.cos(theta3) - t2 * math.cos(theta2)
-            D = t3 * math.sin(theta3) - t2 * math.sin(theta2)
-            
-            norm = math.sqrt(C**2 + D**2)
-            if norm < self.n - 1e-6:
-                raise ValueError("No solution for phi")
-            
-            alpha = math.atan2(D, C)
-            phi = math.asin(self.n / norm) - alpha
-            
-            return phi
-        elif edges == ['left', 'bottom', 'right']:
-            # Similar implementation for other cases
-            pass
+        # 根据第二个顶点的约束修正（优先使用x约束）
+        if p1_edge == 'left':
+            xO = -self.t[p1] * cos(phi + self.theta[p1])
+        elif p1_edge == 'right':
+            xO = self.m - self.t[p1] * cos(phi + self.theta[p1])
+        elif p1_edge in ['top', 'bottom'] and p0_edge in ['left', 'right']:
+            # 如果第一个顶点用了x约束，这里用y约束
+            if p1_edge == 'top':
+                yO = self.n - self.t[p1] * sin(phi + self.theta[p1])
+            else:
+                yO = -self.t[p1] * sin(phi + self.theta[p1])
         
-        raise NotImplementedError("This edge combination not yet implemented")
+        return xO, yO
     
-    def _compute_position(self, edges: List[str], vertex_order: List[int], phi: float) -> Tuple[float, float]:
-        """Compute O's position given phi and edge assignments"""
-        if edges == ['left', 'bottom', 'top']:
-            v1, v2, v3 = vertex_order
-            t1, theta1 = self.t[v1], self.theta[v1]
-            xO = -t1 * math.cos(phi + theta1)
-            
-            t2, theta2 = self.t[v2], self.theta[v2]
-            yO = -t2 * math.sin(phi + theta2)
-            
-            # Verify third constraint
-            t3, theta3 = self.t[v3], self.theta[v3]
-            y3 = yO + t3 * math.sin(phi + theta3)
-            if not math.isclose(y3, self.n, abs_tol=1e-6):
-                raise ValueError("Position doesn't satisfy all constraints")
-            
-            return xO, yO
-        elif edges == ['left', 'bottom', 'right']:
-            # Similar implementation for other cases
-            pass
-        
-        raise NotImplementedError("This edge combination not yet implemented")
-    
-    def _verify_solution(self, xO: float, yO: float, phi: float,
-                        edges: List[str], vertex_order: List[int]) -> bool:
-        """Verify the solution satisfies all constraints"""
-        # Compute all vertices
-        P = []
+    def _verify_solution(self, xO, yO, phi, p0_edge, p1_edge, p2_edge):
+        """验证所有顶点是否在指定边且不越界"""
+        # 计算三个顶点的坐标
+        points = []
         for i in range(3):
-            x = xO + self.t[i] * math.cos(phi + self.theta[i])
-            y = yO + self.t[i] * math.sin(phi + self.theta[i])
-            P.append((x, y))
+            x = xO + self.t[i] * cos(phi + self.theta[i])
+            y = yO + self.t[i] * sin(phi + self.theta[i])
+            points.append((x, y))
         
-        # Check each vertex is on its assigned edge
-        for i in range(3):
-            vi = vertex_order[i]
-            edge = edges[i]
-            x, y = P[vi]
-            
-            if edge == 'left':
-                if not math.isclose(x, 0, abs_tol=1e-6):
-                    return False
-            elif edge == 'right':
-                if not math.isclose(x, self.m, abs_tol=1e-6):
-                    return False
-            elif edge == 'bottom':
-                if not math.isclose(y, 0, abs_tol=1e-6):
-                    return False
-            elif edge == 'top':
-                if not math.isclose(y, self.n, abs_tol=1e-6):
-                    return False
+        # 检查每个顶点是否在指定边
+        edge_checks = {
+            'left': lambda x, y: abs(x) < self.TOL and 0 <= y <= self.n,
+            'right': lambda x, y: abs(x - self.m) < self.TOL and 0 <= y <= self.n,
+            'top': lambda x, y: abs(y - self.n) < self.TOL and 0 <= x <= self.m,
+            'bottom': lambda x, y: abs(y) < self.TOL and 0 <= x <= self.m
+        }
         
-        # Check all vertices within rectangle
-        for x, y in P:
-            if not (0 <= x <= self.m and 0 <= y <= self.n):
+        edges = [p0_edge, p1_edge, p2_edge]
+        for (x, y), edge in zip(points, edges):
+            if not edge_checks[edge](x, y):
                 return False
+        
+        # 检查第四个边没有顶点
+        all_edges = {'left', 'right', 'top', 'bottom'}
+        used_edges = set(edges)
+        free_edge = list(all_edges - used_edges)[0]
+        
+        for x, y in points:
+            if edge_checks[free_edge](x, y):
+                return False  # 有顶点在禁止的边上
+        
+        # 检查三角形完整性（边长不变）
+        # 这里可以添加边长验证（可选）
         
         return True
 
-def main():
-    # 测试数据1: 顶点分别在左、底、右
-    test_case1 = Case3Solver(
-        t=[1.0, 1.0, 1.0],
-        theta=[math.pi, 3*math.pi/2, 0.0],
-        m=2.0,
-        n=2.0
-    )
-    solutions = test_case1.solve()
-    print("Case3 Test1 Solutions:", solutions)
-    
-    # 测试数据2: 顶点分别在左、底、顶
-    test_case2 = Case3Solver(
-        t=[1.0, 1.0, 1.0],
-        theta=[math.pi, 3*math.pi/2, math.pi/2],
-        m=2.0,
-        n=2.0
-    )
-    solutions = test_case2.solve()
-    print("Case3 Test2 Solutions:", solutions)
-    
-    # 测试数据3: 无解情况
-    test_case3 = Case3Solver(
-        t=[1.0, 1.0, 1.0],
-        theta=[0.1, 0.2, 0.3],
-        m=1.0,
-        n=1.0
-    )
-    solutions = test_case3.solve()
-    print("Case3 Test3 Solutions (should be empty):", solutions)
-
+# 示例用法
 if __name__ == "__main__":
-    main()
+    # 示例三角形（等腰直角三角形）
+    t = [1, 1, np.sqrt(2)]
+    theta = [-np.pi/4, np.pi/4, 3*np.pi/4]
+    m, n = 4, 3  # 矩形尺寸
+    
+    solver = Case3Solver(t, theta, m, n)
+    solutions = solver.solve()
+    
+    print(f"找到 {len(solutions)} 个解:")
+    for i, (xO, yO, phi) in enumerate(solutions, 1):
+        print(f"解 {i}: 中心({xO:.2f}, {yO:.2f}), 旋转角 {np.degrees(phi):.2f}°")
