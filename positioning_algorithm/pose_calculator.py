@@ -5,6 +5,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from .case_solvers.case1_solver import Case1Solver
 from .case_solvers.case2_solver import Case2Solver
 from .case_solvers.case3_solver import Case3Solver
+from itertools import combinations
 
 class PoseCalculator():
     def __init__(self, robot, m: float, n: float):
@@ -46,36 +47,55 @@ class PoseCalculator():
             resl_lst.append(result)
         self.result_list = resl_lst
     
-    def calculate_pose(self, t: np.ndarray) -> Queue:
-        """核心位姿计算算法"""
+    def calculate_pose(self, t: np.ndarray) -> List[Tuple[Queue, np.ndarray]]:
+        """核心位姿计算算法，处理所有可能的3向量组合"""
         # 从激光配置中提取参数
         r, delta, theta = self._get_laser_params()
         
-        # 计算v向量（机器人坐标系）
-        v = self._calculate_v_vectors(r, delta, theta, t)
+        # 计算所有v向量（机器人坐标系）
+        all_v = self._calculate_v_vectors(r, delta, theta, t)
         
-        # 更新求解器参数
-        self._update_solvers(r, delta, theta)
+        # 获取所有可能的3向量组合
+        v_combinations = list(combinations(range(len(all_v)), 3))
         
-        # 使用三个求解器计算解
-        xforms = Queue()
+        results = []
         
-        # 情况1：边在底边，对角在邻边
-        solutions_case1 = self.case1_solver.solve()
-        for sol in solutions_case1:
-            xforms.put((sol[:2], sol[2]))  # (P, phi)
-        
-        # 情况2：边在底边，对角在对边
-        solutions_case2 = self.case2_solver.solve()
-        for sol in solutions_case2:
-            xforms.put((sol[:2], sol[2]))
-        
-        # 情况3：三个顶点在三条边上
-        solutions_case3 = self.case3_solver.solve()
-        for sol in solutions_case3:
-            xforms.put((sol[:2], sol[2]))
+        for idx_comb in v_combinations:
+            # 获取当前组合的3个v向量
+            v_comb = [all_v[i] for i in idx_comb]
+            v_comb = np.array(v_comb)
             
-        return [xforms, v]
+            # 计算当前组合的t和theta
+            t1, theta1 = self.compute_v_to_t_theta(v_comb)
+            
+            # 更新求解器参数（使用当前组合的激光参数）
+            r_comb = [r[i] for i in idx_comb]
+            delta_comb = [delta[i] for i in idx_comb]
+            theta_comb = [theta[i] for i in idx_comb]
+            self._update_solvers(r_comb, delta_comb, theta_comb)
+            
+            # 使用三个求解器计算解
+            xforms = Queue()
+            
+            # 情况1：边在底边，对角在邻边
+            self.case1_solver.t = t1
+            self.case1_solver.theta = theta1
+            solutions_case1 = self.case1_solver.solve()
+            for sol in solutions_case1:
+                xforms.put((sol[:2], sol[2]))  # (P, phi)
+            
+            # 情况2：边在底边，对角在对边
+            solutions_case2 = self.case2_solver.solve()
+            for sol in solutions_case2:
+                xforms.put((sol[:2], sol[2]))
+            
+            # 情况3：三个顶点在三条边上
+            solutions_case3 = self.case3_solver.solve()
+            for sol in solutions_case3:
+                xforms.put((sol[:2], sol[2]))
+                
+            results.append((xforms, v_comb))
+        return xforms, all_v
     
     def _get_laser_params(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """从机器人配置提取激光参数"""
@@ -118,6 +138,18 @@ class PoseCalculator():
     def normalize_angle(self, angle: float) -> float:
         """将角度归一化到 [-π, π] 范围内"""
         return np.arctan2(np.sin(angle), np.cos(angle))
+    
+    def compute_v_to_t_theta(self, v:np.ndarray) :
+        t = []
+        theta = []
+        for i in range(3):
+            vi = v[i]
+            t.append(np.linalg.norm(vi))
+            the = np.arctan2(vi[1], vi[0])
+            if the < 0:
+                the += 2 * np.pi
+            theta.append(the)
+        return t, theta
     
     def stop(self):
         """停止线程"""
