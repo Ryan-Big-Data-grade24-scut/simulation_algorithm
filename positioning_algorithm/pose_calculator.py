@@ -78,16 +78,22 @@ class PoseCalculator():
             xforms = Queue()
             
             # 情况1：边在底边，对角在邻边
+            #"""
             self.case1_solver.t = t1
             self.case1_solver.theta = theta1
             solutions_case1 = self.case1_solver.solve()
             for sol in solutions_case1:
                 xforms.put((sol[:2], sol[2]))  # (P, phi)
+            #"""
             
             # 情况2：边在底边，对角在对边
+            #"""
+            self.case2_solver.t = t1
+            self.case2_solver.theta = theta1
             solutions_case2 = self.case2_solver.solve()
             for sol in solutions_case2:
                 xforms.put((sol[:2], sol[2]))
+            #"""
             
             # 情况3：三个顶点在三条边上
             solutions_case3 = self.case3_solver.solve()

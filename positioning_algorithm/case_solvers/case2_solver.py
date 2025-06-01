@@ -1,230 +1,219 @@
-#./positioning_algorithm/case_solvers/case2_solver.py
 import math
 from typing import List, Tuple
 
 class Case2Solver:
-    """Solver for case where one edge is on rectangle edge and opposite vertex is on opposite edge"""
-    
     def __init__(self, t: List[float], theta: List[float], m: float, n: float):
+        """
+        t: 三角形各顶点到中心O的距离 [t0, t1, t2]
+        theta: 各顶点相对于O的初始角度 [θ0, θ1, θ2] (弧度)
+        m: 矩形宽度
+        n: 矩形高度
+        """
         self.t = t
         self.theta = theta
         self.m = m
         self.n = n
-    
+        self.TOL = 1e-6
+        self.edges = ['bottom', 'top', 'left', 'right']
+        self.adj_edges = {
+            'bottom': ['left', 'right'],
+            'top': ['left', 'right'],
+            'left': ['bottom', 'top'],
+            'right': ['bottom', 'top']
+        }
+
     def solve(self) -> List[Tuple[float, float, float]]:
+        """返回所有有效解 (xO, yO, phi) 的列表"""
         solutions = []
-        
-        # Try all 3 edges as possible base edges
         for base_idx in range(3):
-            p1_idx = base_idx
-            p2_idx = (base_idx + 1) % 3
+            p1, p2 = base_idx, (base_idx + 1) % 3
             opp_idx = (base_idx + 2) % 3
             
-            # Try all 4 rectangle edges for base
-            for rect_edge in ['bottom', 'top', 'left', 'right']:
-                try:
-                    phi = self._solve_phi(base_idx, rect_edge)
-                    xO, yO = self._compute_position(base_idx, rect_edge, phi)
-                    
-                    if self._verify_solution(xO, yO, phi, base_idx, rect_edge):
-                        solutions.append((xO, yO, phi))
-                except (ValueError, AssertionError):
-                    continue
-        
+            for rect_edge in self.edges:
+                for adj_edge in self.adj_edges[rect_edge]:
+                    phi_candidates = self._solve_phi_equation(p1, p2, opp_idx, rect_edge)
+                    for phi in phi_candidates:
+                        xO, yO = self._compute_position(phi, p1, p2, opp_idx, rect_edge, adj_edge)
+                        if self._verify_solution(xO, yO, phi, p1, p2, opp_idx, rect_edge, adj_edge):
+                            solutions.append((xO, yO, phi))
         return solutions
-    
-    def _solve_phi(self, base_idx: int, rect_edge: str) -> float:
-        p1_idx = base_idx
-        p2_idx = (base_idx + 1) % 3
-        opp_idx = (base_idx + 2) % 3
-        
+
+    def _solve_phi_equation(self, p1: int, p2: int, opp_idx: int, rect_edge: str) -> List[float]:
+        """解角度方程，返回phi候选值列表"""
         if rect_edge in ['bottom', 'top']:
-            # Base is on horizontal edge
-            y_const = 0 if rect_edge == 'bottom' else self.n
-            opp_const = self.n if rect_edge == 'bottom' else 0
+            # 水平基边情况
+            # 约束1: 基边两个顶点在水平边 (y=0或y=n)
+            # 约束2: 对角顶点在对边 (顶边或底边)
             
-            # Equations:
-            # yO + t1*sin(phi+θ1) = y_const
-            # yO + t2*sin(phi+θ2) = y_const
-            # yO + t3*sin(phi+θ3) = opp_const
+            # 方程形式: t_opp*sin(phi+θ_opp) - t_p1*sin(phi+θ_p1) = target
+            target = self.n if rect_edge == 'bottom' else -self.n
             
-            # From first two equations:
-            t1, t2 = self.t[p1_idx], self.t[p2_idx]
-            theta1, theta2 = self.theta[p1_idx], self.theta[p2_idx]
-            
-            A = t1 * math.cos(theta1) - t2 * math.cos(theta2)
-            B = t1 * math.sin(theta1) - t2 * math.sin(theta2)
-            
-            if abs(A) < 1e-6 and abs(B) < 1e-6:
-                raise ValueError("No unique solution for phi")
-            
-            phi = math.atan2(-B, A)
-            
-            # Verify opposite vertex constraint
-            t3 = self.t[opp_idx]
-            theta3 = self.theta[opp_idx]
-            y_opp = t3 * math.sin(phi + theta3)
-            if not math.isclose(y_opp, opp_const - (y_const - y_opp), abs_tol=1e-6):
-                raise ValueError("Opposite vertex constraint not satisfied")
-            
-            return phi
-            
+            A = (self.t[opp_idx] * math.cos(self.theta[opp_idx]) - 
+                 self.t[p1] * math.cos(self.theta[p1]))
+            B = (self.t[opp_idx] * math.sin(self.theta[opp_idx]) - 
+                 self.t[p1] * math.sin(self.theta[p1]))
         else:
-            # Base is on vertical edge
-            x_const = 0 if rect_edge == 'left' else self.m
-            opp_const = self.m if rect_edge == 'left' else 0
+            # 垂直基边情况
+            # 约束1: 基边两个顶点在垂直边 (x=0或x=m)
+            # 约束2: 对角顶点在对边 (左边或右边)
             
-            # Equations:
-            # xO + t1*cos(phi+θ1) = x_const
-            # xO + t2*cos(phi+θ2) = x_const
-            # xO + t3*cos(phi+θ3) = opp_const
+            # 方程形式: t_opp*cos(phi+θ_opp) - t_p1*cos(phi+θ_p1) = target
+            target = self.m if rect_edge == 'left' else -self.m
             
-            # From first two equations:
-            t1, t2 = self.t[p1_idx], self.t[p2_idx]
-            theta1, theta2 = self.theta[p1_idx], self.theta[p2_idx]
-            
-            A = t1 * math.sin(theta1) - t2 * math.sin(theta2)
-            B = t1 * math.cos(theta1) - t2 * math.cos(theta2)
-            
-            if abs(A) < 1e-6 and abs(B) < 1e-6:
-                raise ValueError("No unique solution for phi")
-            
-            phi = math.atan2(B, -A)
-            
-            # Verify opposite vertex constraint
-            t3 = self.t[opp_idx]
-            theta3 = self.theta[opp_idx]
-            x_opp = t3 * math.cos(phi + theta3)
-            if not math.isclose(x_opp, opp_const - (x_const - x_opp), abs_tol=1e-6):
-                raise ValueError("Opposite vertex constraint not satisfied")
-            
-            return phi
-    
-    def _compute_position(self, base_idx: int, rect_edge: str, phi: float) -> Tuple[float, float]:
-        p1_idx = base_idx
-        p2_idx = (base_idx + 1) % 3
+            A = (self.t[opp_idx] * math.sin(self.theta[opp_idx]) - 
+                 self.t[p1] * math.sin(self.theta[p1]))
+            B = (self.t[opp_idx] * math.cos(self.theta[opp_idx]) - 
+                 self.t[p1] * math.cos(self.theta[p1]))
+
+        # 解方程 A*sin(phi) + B*cos(phi) = target (水平) 或 A*cos(phi) - B*sin(phi) = target (垂直)
+        norm = math.sqrt(A**2 + B**2)
+        if norm < self.TOL:
+            return []  # 无解
         
-        if rect_edge in ['bottom', 'top']:
-            y_const = 0 if rect_edge == 'bottom' else self.n
-            t1, theta1 = self.t[p1_idx], self.theta[p1_idx]
-            yO = y_const - t1 * math.sin(phi + theta1)
-            
-            # xO must place both base vertices within [0, m]
-            t1, t2 = self.t[p1_idx], self.t[p2_idx]
-            theta1, theta2 = self.theta[p1_idx], self.theta[p2_idx]
-            
-            xP1 = t1 * math.cos(phi + theta1)
-            xP2 = t2 * math.cos(phi + theta2)
-            
-            xO_min = max(-xP1, -xP2)
-            xO_max = min(self.m - xP1, self.m - xP2)
-            
-            if xO_min > xO_max + 1e-6:
-                raise ValueError("No valid xO position")
-            
-            xO = (xO_min + xO_max) / 2
-            return xO, yO
+        if abs(norm - abs(target)) < self.TOL:
+            # 特殊情况：norm ≈ |target|
+            if target > 0:
+                phi = math.atan2(B, A) if rect_edge in ['bottom', 'top'] else math.atan2(B, -A)
+            else:
+                phi = math.atan2(-B, -A) if rect_edge in ['bottom', 'top'] else math.atan2(-B, A)
+            return [phi]
+        elif norm < abs(target):
+            return []  # 无解
         else:
-            x_const = 0 if rect_edge == 'left' else self.m
-            t1, theta1 = self.t[p1_idx], self.theta[p1_idx]
-            xO = x_const - t1 * math.cos(phi + theta1)
+            # 一般情况：两个解
+            alpha = math.atan2(B, A)
+            if rect_edge in ['bottom', 'top']:
+                phi1 = math.asin(target / norm) - alpha
+                phi2 = math.pi - math.asin(target / norm) - alpha
+            else:
+                phi1 = math.acos(target / norm) - alpha
+                phi2 = -math.acos(target / norm) - alpha
+            return [phi1, phi2]
+
+    def _compute_position(self, phi: float, p1: int, p2: int, opp_idx: int, 
+                         rect_edge: str, adj_edge: str) -> Tuple[float, float]:
+        """计算中心O的坐标(xO, yO)"""
+        if rect_edge in ['bottom', 'top']:
+            # 水平基边情况
+            # 1. 计算yO：使基边在y=0或y=n上
+            y_target = 0 if rect_edge == 'bottom' else self.n
+            yO = y_target - self.t[p1] * math.sin(phi + self.theta[p1])
             
-            # yO must place both base vertices within [0, n]
-            t1, t2 = self.t[p1_idx], self.t[p2_idx]
-            theta1, theta2 = self.theta[p1_idx], self.theta[p2_idx]
+            # 2. 计算xO：使对角顶点在对边，并确保基边顶点在矩形内
+            # 基边两个顶点P1和P2的x坐标：
+            x_p1 = self.t[p1] * math.cos(phi + self.theta[p1])
+            x_p2 = self.t[p2] * math.cos(phi + self.theta[p2])
             
-            yP1 = t1 * math.sin(phi + theta1)
-            yP2 = t2 * math.sin(phi + theta2)
+            # 确定xO范围
+            x_min = max(-x_p1, -x_p2)  # 确保xO + x_pi >= 0
+            x_max = min(self.m - x_p1, self.m - x_p2)  # 确保xO + x_pi <= m
             
-            yO_min = max(-yP1, -yP2)
-            yO_max = min(self.n - yP1, self.n - yP2)
+            if x_min > x_max + self.TOL:
+                return (math.nan, math.nan)  # 无效位置
             
-            if yO_min > yO_max + 1e-6:
-                raise ValueError("No valid yO position")
+            # 根据邻边约束调整xO
+            if adj_edge == 'left':
+                xO = -min(x_p1, x_p2)
+            elif adj_edge == 'right':
+                xO = self.m - max(x_p1, x_p2)
+            else:
+                xO = (x_min + x_max) / 2
+        else:
+            # 垂直基边情况
+            # 1. 计算xO：使基边在x=0或x=m上
+            x_target = 0 if rect_edge == 'left' else self.m
+            xO = x_target - self.t[p1] * math.cos(phi + self.theta[p1])
             
-            yO = (yO_min + yO_max) / 2
-            return xO, yO
-    
+            # 2. 计算yO：使对角顶点在对边，并确保基边顶点在矩形内
+            # 基边两个顶点P1和P2的y坐标：
+            y_p1 = self.t[p1] * math.sin(phi + self.theta[p1])
+            y_p2 = self.t[p2] * math.sin(phi + self.theta[p2])
+            
+            # 确定yO范围
+            y_min = max(-y_p1, -y_p2)  # 确保yO + y_pi >= 0
+            y_max = min(self.n - y_p1, self.n - y_p2)  # 确保yO + y_pi <= n
+            
+            if y_min > y_max + self.TOL:
+                return (math.nan, math.nan)  # 无效位置
+            
+            # 根据邻边约束调整yO
+            if adj_edge == 'bottom':
+                yO = -min(y_p1, y_p2)
+            elif adj_edge == 'top':
+                yO = self.n - max(y_p1, y_p2)
+            else:
+                yO = (y_min + y_max) / 2
+        
+        return (xO, yO)
+
     def _verify_solution(self, xO: float, yO: float, phi: float, 
-                        base_idx: int, rect_edge: str) -> bool:
-        p1_idx = base_idx
-        p2_idx = (base_idx + 1) % 3
-        opp_idx = (base_idx + 2) % 3
+                        p1: int, p2: int, opp_idx: int, 
+                        rect_edge: str, adj_edge: str) -> bool:
+        """验证解的有效性"""
+        if math.isnan(xO) or math.isnan(yO):
+            return False
         
-        # Compute all vertices
-        P = []
+        # 1. 检查基边两个顶点在指定边
+        for pi in [p1, p2]:
+            x_pi = xO + self.t[pi] * math.cos(phi + self.theta[pi])
+            y_pi = yO + self.t[pi] * math.sin(phi + self.theta[pi])
+            
+            if rect_edge == 'bottom':
+                if abs(y_pi) > self.TOL:
+                    return False
+            elif rect_edge == 'top':
+                if abs(y_pi - self.n) > self.TOL:
+                    return False
+            elif rect_edge == 'left':
+                if abs(x_pi) > self.TOL:
+                    return False
+            elif rect_edge == 'right':
+                if abs(x_pi - self.m) > self.TOL:
+                    return False
+        
+        # 2. 检查对角顶点在对边
+        x_opp = xO + self.t[opp_idx] * math.cos(phi + self.theta[opp_idx])
+        y_opp = yO + self.t[opp_idx] * math.sin(phi + self.theta[opp_idx])
+        
+        if rect_edge in ['bottom', 'top']:
+            target_edge = 'top' if rect_edge == 'bottom' else 'bottom'
+            if target_edge == 'top':
+                if abs(y_opp - self.n) > self.TOL:
+                    return False
+            else:
+                if abs(y_opp) > self.TOL:
+                    return False
+        else:
+            target_edge = 'right' if rect_edge == 'left' else 'left'
+            if target_edge == 'right':
+                if abs(x_opp - self.m) > self.TOL:
+                    return False
+            else:
+                if abs(x_opp) > self.TOL:
+                    return False
+        
+        # 3. 检查邻边约束
+        x_adj = xO + self.t[(opp_idx + 1) % 3] * math.cos(phi + self.theta[(opp_idx + 1) % 3])
+        y_adj = yO + self.t[(opp_idx + 1) % 3] * math.sin(phi + self.theta[(opp_idx + 1) % 3])
+        
+        if adj_edge == 'left':
+            if x_adj > self.TOL:
+                return False
+        elif adj_edge == 'right':
+            if x_adj < self.m - self.TOL:
+                return False
+        elif adj_edge == 'bottom':
+            if y_adj > self.TOL:
+                return False
+        elif adj_edge == 'top':
+            if y_adj < self.n - self.TOL:
+                return False
+        
+        # 4. 检查所有顶点在矩形内
         for i in range(3):
             x = xO + self.t[i] * math.cos(phi + self.theta[i])
             y = yO + self.t[i] * math.sin(phi + self.theta[i])
-            P.append((x, y))
-        
-        # Check base edge constraints
-        if rect_edge == 'bottom':
-            if not (math.isclose(P[p1_idx][1], 0, abs_tol=1e-6) and 
-                   math.isclose(P[p2_idx][1], 0, abs_tol=1e-6)):
-                return False
-            opp_const = self.n
-        elif rect_edge == 'top':
-            if not (math.isclose(P[p1_idx][1], self.n, abs_tol=1e-6) and 
-                   math.isclose(P[p2_idx][1], self.n, abs_tol=1e-6)):
-                return False
-            opp_const = 0
-        elif rect_edge == 'left':
-            if not (math.isclose(P[p1_idx][0], 0, abs_tol=1e-6) and 
-                   math.isclose(P[p2_idx][0], 0, abs_tol=1e-6)):
-                return False
-            opp_const = self.m
-        elif rect_edge == 'right':
-            if not (math.isclose(P[p1_idx][0], self.m, abs_tol=1e-6) and 
-                   math.isclose(P[p2_idx][0], self.m, abs_tol=1e-6)):
-                return False
-            opp_const = 0
-        
-        # Check opposite vertex constraint
-        if rect_edge in ['bottom', 'top']:
-            if not math.isclose(P[opp_idx][1], opp_const, abs_tol=1e-6):
-                return False
-        else:
-            if not math.isclose(P[opp_idx][0], opp_const, abs_tol=1e-6):
-                return False
-        
-        # Check all vertices within rectangle
-        for x, y in P:
-            if not (0 <= x <= self.m and 0 <= y <= self.n):
+            if x < -self.TOL or x > self.m + self.TOL or y < -self.TOL or y > self.n + self.TOL:
                 return False
         
         return True
-
-def main():
-    # 测试数据1: 底边在底部，顶点在顶部
-    test_case1 = Case2Solver(
-        t=[1.0, 1.0, 2.0],
-        theta=[0.0, math.pi/2, math.pi/2],
-        m=2.0,
-        n=2.0
-    )
-    solutions = test_case1.solve()
-    print("Case2 Test1 Solutions:", solutions)
-    
-    # 测试数据2: 边在左侧，顶点在右侧
-    test_case2 = Case2Solver(
-        t=[1.0, 1.0, 2.0],
-        theta=[math.pi/2, math.pi, math.pi],
-        m=2.0,
-        n=2.0
-    )
-    solutions = test_case2.solve()
-    print("Case2 Test2 Solutions:", solutions)
-    
-    # 测试数据3: 无解情况
-    test_case3 = Case2Solver(
-        t=[1.0, 2.0, 3.0],
-        theta=[0.1, 0.2, 0.3],
-        m=1.0,
-        n=1.0
-    )
-    solutions = test_case3.solve()
-    print("Case2 Test3 Solutions (should be empty):", solutions)
-
-if __name__ == "__main__":
-    main()
