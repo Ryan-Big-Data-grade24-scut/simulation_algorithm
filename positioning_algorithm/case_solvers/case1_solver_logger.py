@@ -182,102 +182,106 @@ class Case1Solver:
         valid_phis = []
         TOL = 1e-6  # Tolerance constant
         
+        p1_idx = (opp_idx - 2) % 3  # Calculate base_idx from opp_idx
+        p2_idx = (p1_idx + 1) % 3
+        
         for phi in candidates:
             try:
                 self._log(f"\n=== Validating phi = {phi:.8f} ===")
                 
-                # Calculate relative coordinates (origin at O)
-                P = []
-                for i in range(3):
+                # Calculate relative coordinates (origin at O) in p1, p2, opp order
+                P = {}
+                for i in [p1_idx, p2_idx, opp_idx]:
                     x = self.t[i] * math.cos(phi + self.theta[i])
                     y = self.t[i] * math.sin(phi + self.theta[i])
-                    P.append((x, y))
+                    P[i] = (x, y)
                     self._log(f"P{i} = ({x:.8f}, {y:.8f})")
                 
                 # 1. Base edge alignment check
                 self._log("\n[Base Edge Validation]")
                 if rect_edge in ['bottom', 'top']:
                     # Check if base edge is horizontal
-                    dy = abs(P[1][1] - P[0][1])
+                    dy = abs(P[p2_idx][1] - P[p1_idx][1])
                     self._log(f"Vertical diff dy = {dy:.8f} (req < {TOL:.1e})")
                     if dy >= TOL:
                         self._log("-> Base not horizontal, skip")
                         continue
                     
-                    base_y = (P[0][1] + P[1][1]) / 2
+                    base_y = (P[p1_idx][1] + P[p2_idx][1]) / 2
                     self._log(f"Base avg y = {base_y:.8f}")
                     
                     # Check third point position
                     if rect_edge == 'bottom':
-                        cond = P[2][1] > base_y - TOL
-                        self._log(f"P2.y = {P[2][1]:.8f} > {base_y-TOL:.8f}? {'PASS' if cond else 'FAIL'}")
+                        cond = P[opp_idx][1] > base_y - TOL
+                        self._log(f"P{opp_idx}.y = {P[opp_idx][1]:.8f} > {base_y-TOL:.8f}? {'PASS' if cond else 'FAIL'}")
                         if not cond:
                             continue
                     else:  # top
-                        cond = P[2][1] < base_y + TOL
-                        self._log(f"P2.y = {P[2][1]:.8f} < {base_y+TOL:.8f}? {'PASS' if cond else 'FAIL'}")
+                        cond = P[opp_idx][1] < base_y + TOL
+                        self._log(f"P{opp_idx}.y = {P[opp_idx][1]:.8f} < {base_y+TOL:.8f}? {'PASS' if cond else 'FAIL'}")
                         if not cond:
                             continue
                 else:  # left/right
                     # Check if base edge is vertical
-                    dx = abs(P[1][0] - P[0][0])
+                    dx = abs(P[p2_idx][0] - P[p1_idx][0])
                     self._log(f"Horizontal diff dx = {dx:.8f} (req < {TOL:.1e})")
                     if dx >= TOL:
                         self._log("-> Base not vertical, skip")
                         continue
                     
-                    base_x = (P[0][0] + P[1][0]) / 2
+                    base_x = (P[p1_idx][0] + P[p2_idx][0]) / 2
                     self._log(f"Base avg x = {base_x:.8f}")
                     
                     # Check third point position
                     if rect_edge == 'left':
-                        cond = P[2][0] > base_x - TOL
-                        self._log(f"P2.x = {P[2][0]:.8f} > {base_x-TOL:.8f}? {'PASS' if cond else 'FAIL'}")
+                        cond = P[opp_idx][0] > base_x - TOL
+                        self._log(f"P{opp_idx}.x = {P[opp_idx][0]:.8f} > {base_x-TOL:.8f}? {'PASS' if cond else 'FAIL'}")
                         if not cond:
                             continue
                     else:  # right
-                        cond = P[2][0] < base_x + TOL
-                        self._log(f"P2.x = {P[2][0]:.8f} < {base_x+TOL:.8f}? {'PASS' if cond else 'FAIL'}")
+                        cond = P[opp_idx][0] < base_x + TOL
+                        self._log(f"P{opp_idx}.x = {P[opp_idx][0]:.8f} < {base_x+TOL:.8f}? {'PASS' if cond else 'FAIL'}")
                         if not cond:
                             continue
                 
                 # 2. Adjacent edge constraint
                 self._log("\n[Adjacent Edge Check]")
                 if adj_edge == 'left':
-                    p2_x = P[2][0]
-                    min_x = min(P[0][0], P[1][0])
+                    p2_x = P[opp_idx][0]
+                    min_x = min(P[p1_idx][0], P[p2_idx][0])
                     cond = p2_x <= min_x + TOL
-                    self._log(f"P2.x = {p2_x:.8f} <= min(P0.x,P1.x)+tol = {min_x+TOL:.8f}? {'PASS' if cond else 'FAIL'}")
+                    self._log(f"P{opp_idx}.x = {p2_x:.8f} <= min(P{p1_idx}.x,P{p2_idx}.x)+tol = {min_x+TOL:.8f}? {'PASS' if cond else 'FAIL'}")
                     if not cond:
                         continue
                 elif adj_edge == 'right':
-                    p2_x = P[2][0]
-                    max_x = max(P[0][0], P[1][0])
+                    p2_x = P[opp_idx][0]
+                    max_x = max(P[p1_idx][0], P[p2_idx][0])
                     cond = p2_x >= max_x - TOL
-                    self._log(f"P2.x = {p2_x:.8f} >= max(P0.x,P1.x)-tol = {max_x-TOL:.8f}? {'PASS' if cond else 'FAIL'}")
+                    self._log(f"P{opp_idx}.x = {p2_x:.8f} >= max(P{p1_idx}.x,P{p2_idx}.x)-tol = {max_x-TOL:.8f}? {'PASS' if cond else 'FAIL'}")
                     if not cond:
                         continue
                 elif adj_edge == 'bottom':
-                    p2_y = P[2][1]
-                    min_y = min(P[0][1], P[1][1])
+                    p2_y = P[opp_idx][1]
+                    min_y = min(P[p1_idx][1], P[p2_idx][1])
                     cond = p2_y <= min_y + TOL
-                    self._log(f"P2.y = {p2_y:.8f} <= min(P0.y,P1.y)+tol = {min_y+TOL:.8f}? {'PASS' if cond else 'FAIL'}")
+                    self._log(f"P{opp_idx}.y = {p2_y:.8f} <= min(P{p1_idx}.y,P{p2_idx}.y)+tol = {min_y+TOL:.8f}? {'PASS' if cond else 'FAIL'}")
                     if not cond:
                         continue
                 elif adj_edge == 'top':
-                    p2_y = P[2][1]
-                    max_y = max(P[0][1], P[1][1])
+                    p2_y = P[opp_idx][1]
+                    max_y = max(P[p1_idx][1], P[p2_idx][1])
                     cond = p2_y >= max_y - TOL
-                    self._log(f"P2.y = {p2_y:.8f} >= max(P0.y,P1.y)-tol = {max_y-TOL:.8f}? {'PASS' if cond else 'FAIL'}")
+                    self._log(f"P{opp_idx}.y = {p2_y:.8f} >= max(P{p1_idx}.y,P{p2_idx}.y)-tol = {max_y-TOL:.8f}? {'PASS' if cond else 'FAIL'}")
                     if not cond:
                         continue
                 
                 # 3. Translation feasibility
                 self._log("\n[Translation Check]")
-                min_x = min(p[0] for p in P)
-                max_x = max(p[0] for p in P)
-                min_y = min(p[1] for p in P)
-                max_y = max(p[1] for p in P)
+                all_points = list(P.values())
+                min_x = min(p[0] for p in all_points)
+                max_x = max(p[0] for p in all_points)
+                min_y = min(p[1] for p in all_points)
+                max_y = max(p[1] for p in all_points)
                 self._log(f"X range: [{min_x:.8f}, {max_x:.8f}] (rect width={self.m:.1f})")
                 self._log(f"Y range: [{min_y:.8f}, {max_y:.8f}] (rect height={self.n:.1f})")
                 
@@ -341,17 +345,17 @@ class Case1Solver:
         self._log(f"\nVerifying solution: xO={xO:.8f}, yO={yO:.8f}, phi={phi:.8f}")
         self._log(f"base_idx={base_idx}, rect_edge={rect_edge}, adj_edge={adj_edge}")
         
-        # Calculate all vertex positions
-        P = []
-        for i in range(3):
+        # Calculate all vertex positions in p1, p2, opp order
+        P = {}
+        for i in [p1_idx, p2_idx, opp_idx]:
             x = xO + self.t[i] * math.cos(phi + self.theta[i])
             y = yO + self.t[i] * math.sin(phi + self.theta[i])
-            P.append((x, y))
+            P[i] = (x, y)
             self._log(f"P{i} = ({x:.8f}, {y:.8f})")
         
         # Simplified verification since we already did rigorous checks
         # Just ensure all points are within rectangle bounds with tolerance
-        for i, (x, y) in enumerate(P):
+        for i, (x, y) in P.items():
             x_ok = (-TOL <= x <= self.m + TOL)
             y_ok = (-TOL <= y <= self.n + TOL)
             

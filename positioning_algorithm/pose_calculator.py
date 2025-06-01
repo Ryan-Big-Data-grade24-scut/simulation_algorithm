@@ -2,8 +2,8 @@
 import numpy as np
 from queue import Queue
 from typing import List, Dict, Any, Optional, Tuple
-from .case_solvers.case1_solver import Case1Solver
-from .case_solvers.case2_solver import Case2Solver
+from .case_solvers.case1_solver_logger import Case1Solver
+from .case_solvers.case2_solver_logger import Case2Solver
 from .case_solvers.case3_solver import Case3Solver
 from itertools import combinations
 
@@ -43,7 +43,7 @@ class PoseCalculator():
                 'phi': phi,
                 'v': v
             }
-            print(result)
+            #print(result)
             resl_lst.append(result)
         self.result_list = resl_lst
     
