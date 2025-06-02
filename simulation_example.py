@@ -1,10 +1,6 @@
 #./simulation_example.py
-import numpy as np
-import time
 from simulation_entries.robot import RobotLaserScanner
 from simulation_entries.visual import MultiRobotVisualizer
-from positioning_algorithm.pose_calculator import PoseCalculator
-from positioning_algorithm.pose_display import PoseDisplay
 import matplotlib.pyplot as plt
 from simulation_thread import RobotController
 
@@ -17,9 +13,9 @@ def main():
     try:
         # 启动所有线程
         robot1 = RobotLaserScanner(x=2, y=3)
-        controller = RobotController(robots=[robot1], m=10, n=10)
+        controller = RobotController(robots=[robot1], m=20, n=10)
         # 创建可视化器并关联
-        visualizer = MultiRobotVisualizer(robot_scanners=[robot1])
+        visualizer = MultiRobotVisualizer(robot_scanners=[robot1], m=20, n=10)
         controller.visualizer = visualizer
         controller.start()
         plt.show()

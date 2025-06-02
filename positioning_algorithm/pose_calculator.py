@@ -52,6 +52,9 @@ class PoseCalculator():
         self.result_list = resl_lst
     
     def calculate_pose(self, t: np.ndarray) -> List[Tuple[Queue, np.ndarray]]:
+        self.case1_solver.refresh_log()
+        self.case2_solver.refresh_log()
+        self.case3_solver.refresh_log()
         """核心位姿计算算法，处理所有可能的3向量组合"""
         # 从激光配置中提取参数
         r, delta, theta = self._get_laser_params()
@@ -145,7 +148,7 @@ class PoseCalculator():
             y = r[i]*np.sin(delta[i]) + t[i]*np.sin(theta[i])
             v[i] = np.array([x, y])
         return v
-    #"""
+    """
     def _update_solvers(self, r, delta, theta):
         #\"""更新三个求解器的参数\"""
         # 计算t和theta参数（相对于参考方向）
@@ -157,10 +160,7 @@ class PoseCalculator():
         self.case1_solver = Case1Solver(t, theta_rel, self.m, self.n, config=self.config1)
         self.case2_solver = Case2Solver(t, theta_rel, self.m, self.n, config=self.config2)
         self.case3_solver = Case3Solver(t, theta_rel, self.m, self.n, config=self.config3)
-    #"""
-    def normalize_angle(self, angle: float) -> float:
-        """将角度归一化到 [-π, π] 范围内"""
-        return np.arctan2(np.sin(angle), np.cos(angle))
+    """
     
     def compute_v_to_t_theta(self, v:np.ndarray) :
         t = []

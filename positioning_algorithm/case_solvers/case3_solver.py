@@ -75,35 +75,39 @@ class Case3Solver(BaseSolver):
     
     def _solve_edge_combo(self, p0, p1, p2, p0_edge, p1_edge, p2_edge):
         """解特定边组合的方程（保持原有逻辑）"""
-        self.logger.debug(f"\n    [Solving phi equation for edge combination]")
-        self.logger.debug(f"    P0 on {p0_edge}, P1 on {p1_edge}, P2 on {p2_edge}")
+        self.logger.info(f"\n    [Solving phi equation for edge combination]")
+        self.logger.info(f"    P0 on {p0_edge}, P1 on {p1_edge}, P2 on {p2_edge}")
         
         if {p0_edge, p1_edge} == {'left', 'right'}:
-            self.logger.debug("    Case: Left + Right + Top/Bottom")
+            self.logger.info("    Case: Left + Right + Top/Bottom")
             A = self.t[p1]*cos(self.theta[p1]) - self.t[p0]*cos(self.theta[p0])
             B = -(self.t[p1]*sin(self.theta[p1]) - self.t[p0]*sin(self.theta[p0]))
             C = self.m
             equation_type = "A*cos(phi) + B*sin(phi) = C (left-right case)"
+            self._log_math(f"A = {self.t[p1]}*cos({self.theta[p1]}) - {self.t[p0]}*cos({self.theta[p0]})", A)
+            self._log_math(f"B = -({self.t[p1]}*sin({self.theta[p1]}) - {self.t[p0]}*sin({self.theta[p0]}))", B)
         elif {p0_edge, p1_edge} == {'left', 'top'} and p2_edge == 'bottom':
-            self.logger.debug("    Case: Left + Top + Bottom")
-            A = self.t[p2]*sin(self.theta[p2]) - self.t[p0]*sin(self.theta[p0])
-            B = self.t[p2]*cos(self.theta[p2]) - self.t[p0]*cos(self.theta[p0])
+            self.logger.info("    Case: Left + Top + Bottom")
+            A = self.t[p2]*sin(self.theta[p2]) - self.t[p1]*sin(self.theta[p1])  # 使用P2和P1
+            B = self.t[p2]*cos(self.theta[p2]) - self.t[p1]*cos(self.theta[p1])  # 使用P2和P1
             C = self.n
             equation_type = "A*cos(phi) + B*sin(phi) = C (left-top-bottom case)"
+            self._log_math(f"A = {self.t[p2]}*sin({self.theta[p2]}) - {self.t[p1]}*sin({self.theta[p1]})", A)
+            self._log_math(f"B = {self.t[p2]}*cos({self.theta[p2]}) - {self.t[p1]}*cos({self.theta[p1]})", B)
         elif {p0_edge, p1_edge} == {'right', 'top'} and p2_edge == 'bottom':
-            self.logger.debug("    Case: Right + Top + Bottom")
-            A = self.t[p2]*sin(self.theta[p2]) - self.t[p0]*sin(self.theta[p0])
-            B = self.t[p2]*cos(self.theta[p2]) - self.t[p0]*cos(self.theta[p0])
+            self.logger.info("    Case: Right + Top + Bottom")
+            A = self.t[p2]*sin(self.theta[p2]) - self.t[p1]*sin(self.theta[p1])  # 使用P2和P1
+            B = self.t[p2]*cos(self.theta[p2]) - self.t[p1]*cos(self.theta[p1])  # 使用P2和P1
             C = self.n
             equation_type = "A*cos(phi) + B*sin(phi) = C (right-top-bottom case)"
+            self._log_math(f"A = {self.t[p2]}*sin({self.theta[p2]}) -{ self.t[p1]}*sin({self.theta[p1]})", A)
+            self._log_math(f"B = {self.t[p2]}*cos({self.theta[p2]}) - {self.t[p1]}*cos({self.theta[p1]})", B)
         else:
-            self.logger.debug("    Unsupported edge combination, skipping")
+            self.logger.info("    Unsupported edge combination, skipping")
             return []
         
-        self.logger.debug(f"    Equation to solve: {equation_type}")
-        self._log_math(f"A = {self.t[p1]}*cos({self.theta[p1]}) - {self.t[p0]}*cos({self.theta[p0]})", A)
-        self._log_math(f"B = {self.t[p1]}*sin({self.theta[p1]}) - {self.t[p0]}*sin({self.theta[p0]})", B)
         self._log_math(f"C", C)
+        self.logger.info(f"    Equation to solve: {equation_type}")
         
         # 解 A*cos(phi) + B*sin(phi) = C
         norm = sqrt(A*A + B*B)

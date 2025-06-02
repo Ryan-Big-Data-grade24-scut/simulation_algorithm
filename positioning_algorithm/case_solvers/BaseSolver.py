@@ -3,6 +3,7 @@ import sys
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Optional
 import logging
+import time
 
 class BaseSolverConfig:
     """统一配置类"""
@@ -32,6 +33,10 @@ class BaseSolver(ABC):
     def _setup_logging(self):
         """需求4：统一日志开关和格式"""
         self.logger = logging.getLogger(self.__class__.__name__)
+        for handler in self.logger.handlers[:]:
+            self.logger.removeHandler(handler)
+            handler.close()
+
         if self.config.log_enabled:
             handler = logging.FileHandler(
                 self.config.log_file, 
@@ -44,6 +49,21 @@ class BaseSolver(ABC):
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
             self.logger.setLevel(self.config.log_level)
+
+    def refresh_log(self):
+        """清空日志文件并重新初始化日志系统"""
+        if self.config.log_enabled:
+            # 关闭并移除所有现有处理器
+            for handler in self.logger.handlers[:]:
+                self.logger.removeHandler(handler)
+                handler.close()
+            
+            # 重新创建文件（覆盖模式）
+            open(self.config.log_file, 'w').close()
+            
+            # 重新初始化日志
+            self._setup_logging()
+            self.logger.info(f"Log refreshed at {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     def _validate_inputs(self, t, theta, m, n):
         """需求2：多级try的集中校验"""
@@ -58,7 +78,7 @@ class BaseSolver(ABC):
 
     def _log_math(self, expr: str, result):
         """需求3：[MATH]级别日志"""
-        self.logger.debug(f"[MATH] {expr} = {self._format_result(result)}")
+        self.logger.info(f"[MATH] {expr} = {self._format_result(result)}")
 
     def _log_compare(self, a: float, b: float):
         """需求3：[COMPARE]级别日志"""

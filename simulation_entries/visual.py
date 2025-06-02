@@ -5,13 +5,16 @@ from matplotlib.widgets import Slider, Button
 from matplotlib.collections import LineCollection
 
 class MultiRobotVisualizer:
-    def __init__(self, robot_scanners=None):
+    def __init__(self, robot_scanners=None, m=10, n=10):
         """
         多机器人可视化类
         
         参数:
             robot_scanners: RobotLaserScanner实例列表
         """
+
+        self.m = m
+        self.n = n
         self.robots = robot_scanners if robot_scanners else []
         
         # 创建图形界面
@@ -42,10 +45,10 @@ class MultiRobotVisualizer:
         
         # 机器人控制滑动条
         self.ax_x = plt.axes([0.25, 0.15, 0.65, 0.03])
-        self.slider_x = Slider(self.ax_x, 'X', 0, 10, valinit=5)
+        self.slider_x = Slider(self.ax_x, 'X', 0, self.m, valinit=5)
         
         self.ax_y = plt.axes([0.25, 0.10, 0.65, 0.03])
-        self.slider_y = Slider(self.ax_y, 'Y', 0, 10, valinit=5)
+        self.slider_y = Slider(self.ax_y, 'Y', 0, self.n, valinit=5)
         
         self.ax_phi = plt.axes([0.25, 0.05, 0.65, 0.03])
         self.slider_phi = Slider(self.ax_phi, 'Phi', -np.pi, np.pi, valinit=np.pi/4)
@@ -98,8 +101,8 @@ class MultiRobotVisualizer:
                            [line[0][1], line[1][1]], 
                            'k-', linewidth=2)
         
-        self.ax.set_xlim(-10, 10)
-        self.ax.set_ylim(-10, 10)
+        self.ax.set_xlim(-self.m, self.m)
+        self.ax.set_ylim(-self.n, self.n)
         self.ax.set_aspect('equal')
         self.ax.grid(True)
         self.ax.set_title('Multi-Robot Laser Scanner Simulation')
