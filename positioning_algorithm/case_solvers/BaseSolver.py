@@ -94,3 +94,72 @@ class BaseSolver(ABC):
             x = (x_range[0] + x_range[1])/2 + self.t[i] * math.cos(phi + self.theta[i])
             y = (y_range[0] + y_range[1])/2 + self.t[i] * math.sin(phi + self.theta[i])
             self.logger.info(f"  P{i} = ({x:.2f}, {y:.2f})")
+
+def main():
+    # 测试配置
+    config = BaseSolverConfig(
+        tol=1e-6,
+        log_enabled=True,
+        log_file="test_solver.log",
+        log_level="DEBUG"
+    )
+    
+    # 测试数据
+    t = [1.0, 2.0, 3.0]
+    theta = [0.0, math.pi/2, math.pi]
+    m = 1.0
+    n = 2.0
+    
+    # 创建测试用的具体求解器类
+    class TestSolver(BaseSolver):
+        def solve(self):
+            # 实现抽象方法，返回测试解
+            self._log_math("2 + 2", 4)
+            self._log_compare(1.000001, 1.0)
+            self._log_validation("Test validation", True)
+            
+            # 返回测试解
+            solution = [
+                ((0.0, 1.0), (0.0, 2.0), math.pi/4),
+                ((1.0, 2.0), (1.0, 3.0), math.pi/3)
+            ]
+            
+            for i, sol in enumerate(solution):
+                self._print_solution(sol, i+1)
+            
+            return solution
+    
+    # 测试实例化
+    try:
+        solver = TestSolver(t, theta, m, n, config)
+        print("Solver instantiated successfully.")
+        
+        # 测试求解
+        solutions = solver.solve()
+        print(f"Found {len(solutions)} solutions:")
+        for i, sol in enumerate(solutions):
+            print(f"Solution {i+1}: x_range={sol[0]}, y_range={sol[1]}, phi={sol[2]:.4f}")
+            
+        # 测试日志功能
+        solver.logger.info("This is an info message")
+        solver.logger.debug("This is a debug message")
+        
+        # 测试输入验证
+        try:
+            bad_solver = TestSolver([1,2], theta, m, n, config)
+        except AssertionError as e:
+            print(f"Input validation caught error: {e}")
+            
+        try:
+            bad_solver = TestSolver(t, theta, -1, n, config)
+        except AssertionError as e:
+            print(f"Input validation caught error: {e}")
+            
+    except Exception as e:
+        print(f"Error during testing: {e}")
+        sys.exit(1)
+        
+    print("All tests completed successfully.")
+
+if __name__ == "__main__":
+    main()

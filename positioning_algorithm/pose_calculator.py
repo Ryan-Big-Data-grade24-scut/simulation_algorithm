@@ -4,8 +4,8 @@ from queue import Queue
 from typing import List, Dict, Any, Optional, Tuple
 from .case_solvers.BaseSolver import BaseSolverConfig
 from .case_solvers.case1_solver import Case1Solver
-from .case_solvers.case2_solver_logger import Case2Solver
-from .case_solvers.case3_solver_logger import Case3Solver
+from .case_solvers.case2_solver import Case2Solver
+from .case_solvers.case3_solver import Case3Solver
 from itertools import combinations
 
 class PoseCalculator():
@@ -21,13 +21,14 @@ class PoseCalculator():
         self.m = m
         self.n = n
         self.result_list = []
-        
-        self.config = BaseSolverConfig(tol=1e-3, log_enabled=True, log_file="solver.log", log_level="INFO")    
 
         # 初始化三个求解器（参数将在calculate_pose中更新）
-        self.case1_solver = Case1Solver([1,1,1], [0,0,0], m, n, config=self.config)
-        self.case2_solver = Case2Solver([1,1,1], [0,0,0], m, n)
-        self.case3_solver = Case3Solver([1,1,1], [0,0,0], m, n)
+        self.config1 = BaseSolverConfig(tol=1e-3, log_enabled=True, log_file="logs/solver1.log", log_level="INFO") 
+        self.case1_solver = Case1Solver([1,1,1], [0,0,0], m, n, config=self.config1)
+        self.config2 = BaseSolverConfig(tol=1e-3, log_enabled=True, log_file="logs/solver2.log", log_level="INFO")    
+        self.case2_solver = Case2Solver([1,1,1], [0,0,0], m, n, config=self.config2)
+        self.config3 = BaseSolverConfig(tol=1e-3, log_enabled=True, log_file="logs/solver3.log", log_level="INFO")
+        self.case3_solver = Case3Solver([1,1,1], [0,0,0], m, n, config=self.config3)
 
     def get_sensor_data(self) -> Optional[np.ndarray]:
         """从机器人获取传感器数据"""
@@ -75,7 +76,7 @@ class PoseCalculator():
             r_comb = [r[i] for i in idx_comb]
             delta_comb = [delta[i] for i in idx_comb]
             theta_comb = [theta[i] for i in idx_comb]
-            self._update_solvers(r_comb, delta_comb, theta_comb)
+            #self._update_solvers(r_comb, delta_comb, theta_comb)
             
             # 使用三个求解器计算解
             xforms = Queue()
@@ -93,22 +94,28 @@ class PoseCalculator():
             #"""
             
             # 情况2：边在底边，对角在对边
-            """
+            #"""
             self.case2_solver.t = t1
             self.case2_solver.theta = theta1
             solutions_case2 = self.case2_solver.solve()
             for sol in solutions_case2:
-                xforms.put((sol[:2], sol[2]))
-            """
+                x1, x2 = sol[0]
+                y1, y2 = sol[1]
+                phi = sol[2]
+                xforms.put((((x1+x2)/2, (y1+y2)/2), phi))  # (P, phi)
+            #"""
             
             # 情况3：三个顶点在三条边上
-            """
+            #"""
             self.case3_solver.t = t1
             self.case3_solver.theta = theta1
             solutions_case3 = self.case3_solver.solve()
             for sol in solutions_case3:
-                xforms.put((sol[:2], sol[2]))
-            """
+                x1, x2 = sol[0]
+                y1, y2 = sol[1]
+                phi = sol[2]
+                xforms.put((((x1+x2)/2, (y1+y2)/2), phi))  # (P, phi)
+            #"""
 
             results.append((xforms, v_comb))
         return xforms, all_v
@@ -138,19 +145,19 @@ class PoseCalculator():
             y = r[i]*np.sin(delta[i]) + t[i]*np.sin(theta[i])
             v[i] = np.array([x, y])
         return v
-    
+    #"""
     def _update_solvers(self, r, delta, theta):
-        """更新三个求解器的参数"""
+        #\"""更新三个求解器的参数\"""
         # 计算t和theta参数（相对于参考方向）
         # 这里假设参考方向为x轴正向
         t = [np.linalg.norm(v) for v in r]
         theta_rel = [theta[i] - delta[i] for i in range(3)]
         
         # 更新求解器
-        self.case1_solver = Case1Solver(t, theta_rel, self.m, self.n)
-        self.case2_solver = Case2Solver(t, theta_rel, self.m, self.n)
-        self.case3_solver = Case3Solver(t, theta_rel, self.m, self.n)
-    
+        self.case1_solver = Case1Solver(t, theta_rel, self.m, self.n, config=self.config1)
+        self.case2_solver = Case2Solver(t, theta_rel, self.m, self.n, config=self.config2)
+        self.case3_solver = Case3Solver(t, theta_rel, self.m, self.n, config=self.config3)
+    #"""
     def normalize_angle(self, angle: float) -> float:
         """将角度归一化到 [-π, π] 范围内"""
         return np.arctan2(np.sin(angle), np.cos(angle))

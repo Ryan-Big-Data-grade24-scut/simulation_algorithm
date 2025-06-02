@@ -68,8 +68,8 @@ class Case1Solver(BaseSolver):
             t1, t2 = self.t[p1_idx], self.t[p2_idx]
             theta1, theta2 = self.theta[p1_idx], self.theta[p2_idx]
             
-            A = t1 * math.cos(p1_idx) - t2 * math.cos(p2_idx)
-            B = t1 * math.sin(p1_idx) - t2 * math.sin(p2_idx)
+            A = t1 * math.cos(theta1) - t2 * math.cos(theta2)
+            B = t1 * math.sin(theta1) - t2 * math.sin(theta2)
             self._log_math(f"A = {t1}*cos({theta1}) - {t2}*cos({theta2})", A)
             self._log_math(f"B = {t1}*sin({theta1}) - {t2}*sin({theta2})", B)
 
@@ -99,8 +99,8 @@ class Case1Solver(BaseSolver):
             t1, t2 = self.t[p1_idx], self.t[p2_idx]
             theta1, theta2 = self.theta[p1_idx], self.theta[p2_idx]
             
-            A = t2 * math.sin(p2_idx) - t1 * math.sin(p1_idx)
-            B = t1 * math.cos(p1_idx) - t2 * math.cos(p2_idx)
+            A = t2 * math.sin(theta2) - t1 * math.sin(theta1)
+            B = t1 * math.cos(theta1) - t2 * math.cos(theta2)
             self._log_math(f"A = {t2}*sin({theta2}) - {t1}*sin({theta1})", A)
             self._log_math(f"B = {t1}*cos({theta1}) - {t2}*cos({theta2})", B)
 
