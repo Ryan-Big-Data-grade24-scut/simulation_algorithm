@@ -55,9 +55,13 @@ class RobotController(threading.Thread):
                 continue
             
             # 2. 计算位姿
-            Q, v = calculator.calculate_pose(t)
-            
-            # 3. 保存结果
+            results, v = calculator.calculate_pose(t)
+
+            # 3. 筛选
+            Q = calculator.filter_solutions(results, 1e-1)
+            #print(Q)
+                
+            # 4. 保存结果
             calculator.save_results(Q, v)
     def prepare_robot_data(self):
         """准备机器人状态数据"""

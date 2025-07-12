@@ -84,24 +84,24 @@ class Case3Solver(BaseSolver):
             B = -(self.t[p1]*sin(self.theta[p1]) - self.t[p0]*sin(self.theta[p0]))
             C = self.m
             equation_type = "A*cos(phi) + B*sin(phi) = C (left-right case)"
-            self._log_math(f"A = {self.t[p1]}*cos({self.theta[p1]}) - {self.t[p0]}*cos({self.theta[p0]})", A)
-            self._log_math(f"B = -({self.t[p1]}*sin({self.theta[p1]}) - {self.t[p0]}*sin({self.theta[p0]}))", B)
-        elif {p0_edge, p1_edge} == {'left', 'top'} and p2_edge == 'bottom':
-            self.logger.info("    Case: Left + Top + Bottom")
-            A = self.t[p2]*sin(self.theta[p2]) - self.t[p1]*sin(self.theta[p1])  # 使用P2和P1
-            B = self.t[p2]*cos(self.theta[p2]) - self.t[p1]*cos(self.theta[p1])  # 使用P2和P1
-            C = self.n
-            equation_type = "A*cos(phi) + B*sin(phi) = C (left-top-bottom case)"
-            self._log_math(f"A = {self.t[p2]}*sin({self.theta[p2]}) - {self.t[p1]}*sin({self.theta[p1]})", A)
-            self._log_math(f"B = {self.t[p2]}*cos({self.theta[p2]}) - {self.t[p1]}*cos({self.theta[p1]})", B)
-        elif {p0_edge, p1_edge} == {'right', 'top'} and p2_edge == 'bottom':
-            self.logger.info("    Case: Right + Top + Bottom")
-            A = self.t[p2]*sin(self.theta[p2]) - self.t[p1]*sin(self.theta[p1])  # 使用P2和P1
-            B = self.t[p2]*cos(self.theta[p2]) - self.t[p1]*cos(self.theta[p1])  # 使用P2和P1
-            C = self.n
-            equation_type = "A*cos(phi) + B*sin(phi) = C (right-top-bottom case)"
-            self._log_math(f"A = {self.t[p2]}*sin({self.theta[p2]}) -{ self.t[p1]}*sin({self.theta[p1]})", A)
-            self._log_math(f"B = {self.t[p2]}*cos({self.theta[p2]}) - {self.t[p1]}*cos({self.theta[p1]})", B)
+            self._log_math(
+                f"A = {self.t[p1]:.6f}*cos({self.theta[p1]:.6f}) - {self.t[p0]:.6f}*cos({self.theta[p0]:.6f}) = {A:.6f}", A)
+            self._log_math(
+                f"B = -({self.t[p1]:.6f}*sin({self.theta[p1]:.6f}) - {self.t[p0]:.6f}*sin({self.theta[p0]:.6f})) = {B:.6f}", B)
+            self._log_math(
+                f"C = {C:.6f}", C)
+        elif {p2_edge, p1_edge} == {'bottom', 'top'}:
+            self.logger.info("    Case: Bottom + Top")
+            A = self.t[p2]*sin(self.theta[p2]) - self.t[p1]*sin(self.theta[p1])
+            B = self.t[p2]*cos(self.theta[p2]) - self.t[p1]*cos(self.theta[p1])
+            C = -self.n
+            equation_type = "A*cos(phi) + B*sin(phi) = C (top-bottom case)"
+            self._log_math(
+                f"A = {self.t[p2]:.6f}*sin({self.theta[p2]:.6f}) - {self.t[p1]:.6f}*sin({self.theta[p1]:.6f}) = {A:.6f}", A)
+            self._log_math(
+                f"B = {self.t[p2]:.6f}*cos({self.theta[p2]:.6f}) - {self.t[p1]:.6f}*cos({self.theta[p1]:.6f}) = {B:.6f}", B)
+            self._log_math(
+                f"C = {C:.6f}", C)
         else:
             self.logger.info("    Unsupported edge combination, skipping")
             return []
@@ -111,7 +111,23 @@ class Case3Solver(BaseSolver):
         
         # 解 A*cos(phi) + B*sin(phi) = C
         norm = sqrt(A*A + B*B)
-        self._log_math(f"norm = sqrt(A² + B²)", norm)
+        self._log_math(
+            f"norm = sqrt({A:.6f}^2 + {B:.6f}^2) = {norm:.6f}", norm)
+
+        if abs(C) > norm + self.config.tol:
+            self.logger.debug("    No solution: |C| > norm")
+            return []  # 无解
+
+        alpha = atan2(A, B)
+        self._log_math(
+            f"alpha = atan2({A:.6f}, {B:.6f}) = {alpha:.6f}", alpha)
+
+        phi1 = asin(C / norm) - alpha
+        phi2 = pi - asin(C / norm) - alpha
+        self._log_math(
+            f"phi1 = asin({C/norm:.6f}) - {alpha:.6f} = {phi1:.6f}", phi1)
+        self._log_math(
+            f"phi2 = pi - asin({C/norm:.6f}) - {alpha:.6f} = {phi2:.6f}", phi2)
         
         if abs(C) > norm + self.config.tol:
             self.logger.debug("    No solution: |C| > norm")
@@ -149,18 +165,34 @@ class Case3Solver(BaseSolver):
             if edge == 'left':
                 new_x = -self.t[vertex] * cos(phi + self.theta[vertex])
                 self._log_math(f"{step_name}: xO = -t{vertex}*cos(phi + theta{vertex})", new_x)
+                self._log_math(
+                    f"{step_name}: xO = -{self.t[vertex]:.6f} * cos({phi:.6f} + {self.theta[vertex]:.6f}) = {new_x:.6f}", 
+                    new_x
+                )
                 x_values.append(new_x)
             elif edge == 'right':
                 new_x = self.m - self.t[vertex] * cos(phi + self.theta[vertex])
                 self._log_math(f"{step_name}: xO = m - t{vertex}*cos(phi + theta{vertex})", new_x)
+                self._log_math(
+                    f"{step_name}: xO = {self.m:.6f} - {self.t[vertex]:.6f} * cos({phi:.6f} + {self.theta[vertex]:.6f}) = {new_x:.6f}", 
+                    new_x
+                )
                 x_values.append(new_x)
             elif edge == 'top':
                 new_y = self.n - self.t[vertex] * sin(phi + self.theta[vertex])
                 self._log_math(f"{step_name}: yO = n - t{vertex}*sin(phi + theta{vertex})", new_y)
+                self._log_math(
+                    f"{step_name}: yO = {self.n:.6f} - {self.t[vertex]:.6f} * sin({phi:.6f} + {self.theta[vertex]:.6f}) = {new_y:.6f}", 
+                    new_y
+                )
                 y_values.append(new_y)
             elif edge == 'bottom':
                 new_y = -self.t[vertex] * sin(phi + self.theta[vertex])
                 self._log_math(f"{step_name}: yO = -t{vertex}*sin(phi + theta{vertex})", new_y)
+                self._log_math(
+                    f"{step_name}: yO = -{self.t[vertex]:.6f} * sin({phi:.6f} + {self.theta[vertex]:.6f}) = {new_y:.6f}", 
+                    new_y
+                )
                 y_values.append(new_y)
         
         process_edge(p0, p0_edge, "Initial calculation from P0")

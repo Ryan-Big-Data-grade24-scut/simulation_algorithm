@@ -90,10 +90,13 @@ class PoseCalculator():
             self.case1_solver.theta = theta1
             solutions_case1 = self.case1_solver.solve()
             for sol in solutions_case1:
+                results.append(sol)
+                """
                 x1, x2 = sol[0]
                 y1, y2 = sol[1]
                 phi = sol[2]
                 xforms.put((((x1+x2)/2, (y1+y2)/2), phi))  # (P, phi)
+                """
             #"""
             
             # 情况2：边在底边，对角在对边
@@ -102,10 +105,13 @@ class PoseCalculator():
             self.case2_solver.theta = theta1
             solutions_case2 = self.case2_solver.solve()
             for sol in solutions_case2:
+                results.append(sol)
+                """
                 x1, x2 = sol[0]
                 y1, y2 = sol[1]
                 phi = sol[2]
                 xforms.put((((x1+x2)/2, (y1+y2)/2), phi))  # (P, phi)
+                """
             #"""
             
             # 情况3：三个顶点在三条边上
@@ -114,14 +120,60 @@ class PoseCalculator():
             self.case3_solver.theta = theta1
             solutions_case3 = self.case3_solver.solve()
             for sol in solutions_case3:
+                results.append(sol)
+                """
                 x1, x2 = sol[0]
                 y1, y2 = sol[1]
                 phi = sol[2]
                 xforms.put((((x1+x2)/2, (y1+y2)/2), phi))  # (P, phi)
+                """
             #"""
 
-            results.append((xforms, v_comb))
-        return xforms, all_v
+            #results.append((xforms, v_comb))
+        return results, all_v
+    
+    def filter_solutions(self, solutions: List[Dict], tol: float = None) -> List[Dict]:
+        """
+        根据机器人当前位姿筛选解
+        
+        参数:
+            solutions: 待筛选的解列表
+            tol: 容忍度(可选)，如果为None则使用类初始化时的tol
+            
+        返回:
+            筛选后的解列表
+        """
+        if tol is None:
+            tol = self.tol
+            
+        filtered = Queue()
+        robot_x = self.robot.x
+        robot_y = self.robot.y
+        robot_phi = self.robot.phi
+        #print(solutions)
+        #print(1)
+        for sol in solutions:
+            #print(sol[0], sol[1], sol[2])
+            (xmin, xmax), (ymin, ymax), phi = sol[0], sol[1], sol[2]
+            
+            # 检查x坐标
+            x_ok = (robot_x >= xmin - tol) and (robot_x <= xmax + tol)
+            # 检查y坐标
+            y_ok = (robot_y >= ymin - tol) and (robot_y <= ymax + tol)
+            # 检查角度(考虑角度周期性)
+            phi_diff = abs((robot_phi - phi + np.pi) % (2*np.pi) - np.pi)
+            phi_ok = phi_diff <= tol
+            
+            if x_ok and y_ok and phi_ok:
+                x = xmin
+                y = ymin
+                if not xmin==xmax:
+                    x = robot_x
+                if not ymin==ymax:
+                    y = robot_y
+                filtered.put(((x, y), phi))
+        print(filtered)        
+        return filtered    
     
     def _get_laser_params(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """从机器人配置提取激光参数"""
