@@ -19,6 +19,16 @@ class RobotController(threading.Thread):
         self.update_interval = update_interval
         self.running = True
         self.daemon = True
+        self.laser_params = []
+        for robot in robots:
+            r = []
+            delta = []
+            theta = []
+            for (rel_r, rel_angle), laser_angle in robot.laser_configs:
+                r.append(rel_r)
+                delta.append(rel_angle)
+                theta.append(laser_angle)
+            self.laser_params.append((r, delta, theta))
 
     def run(self):
         """线程主循环"""
@@ -48,21 +58,26 @@ class RobotController(threading.Thread):
 
     def perform_localization(self):
         """执行位姿计算流程"""
-        for calculator in self.pose_calculators:
-            # 1. 获取数据
-            t = calculator.get_sensor_data()
-            if t is None:
+        for idx, calculator in enumerate(self.pose_calculators):
+            t_sensor = calculator.get_sensor_data()
+            if t_sensor is None or len(t_sensor) < 3:
                 continue
-            
-            # 2. 计算位姿
-            results, v = calculator.calculate_pose(t)
+            r, delta, theta = self.laser_params[idx]
+            # 组合所有可能的3束激光
+            from itertools import combinations
+            comb_indices = list(combinations(range(len(t_sensor)), 3))
+            all_results = []
+            for idxs in comb_indices:
+                t_sub = [t_sensor[i] for i in idxs]
+                r_sub = [r[i] for i in idxs]
+                delta_sub = [delta[i] for i in idxs]
+                theta_sub = [theta[i] for i in idxs]
+                t_list, theta_list = calculator.get_t_theta_from_sensor_data(t_sub, r_sub, delta_sub, theta_sub)
+                results = calculator.calculate_pose(t_list, theta_list)
+                all_results.extend(results)
+            Q = calculator.filter_solutions(all_results, 1e-1)
+            calculator.save_results(Q, t_sensor)
 
-            # 3. 筛选
-            Q = calculator.filter_solutions(results, 1e-1)
-            #print(Q)
-                
-            # 4. 保存结果
-            calculator.save_results(Q, v)
     def prepare_robot_data(self):
         """准备机器人状态数据"""
         robot_data = []

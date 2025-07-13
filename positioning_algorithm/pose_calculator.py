@@ -51,86 +51,22 @@ class PoseCalculator():
             resl_lst.append(result)
         self.result_list = resl_lst
     
-    def calculate_pose(self, t: np.ndarray) -> List[Tuple[Queue, np.ndarray]]:
-        self.case1_solver.refresh_log()
-        self.case2_solver.refresh_log()
-        self.case3_solver.refresh_log()
-        """核心位姿计算算法，处理所有可能的3向量组合"""
-        # 从激光配置中提取参数
-        r, delta, theta = self._get_laser_params()
-        
-        # 计算所有v向量（机器人坐标系）
-        all_v = self._calculate_v_vectors(r, delta, theta, t)
-        
-        # 获取所有可能的3向量组合
-        v_combinations = list(combinations(range(len(all_v)), 3))
-        
-        results = []
-        
-        for idx_comb in v_combinations:
-            # 获取当前组合的3个v向量
-            v_comb = [all_v[i] for i in idx_comb]
-            v_comb = np.array(v_comb)
-            
-            # 计算当前组合的t和theta
-            t1, theta1 = self.compute_v_to_t_theta(v_comb)
-            
-            # 更新求解器参数（使用当前组合的激光参数）
-            r_comb = [r[i] for i in idx_comb]
-            delta_comb = [delta[i] for i in idx_comb]
-            theta_comb = [theta[i] for i in idx_comb]
-            #self._update_solvers(r_comb, delta_comb, theta_comb)
-            
-            # 使用三个求解器计算解
-            xforms = Queue()
-            
-            # 情况1：边在底边，对角在邻边
-            #"""
-            self.case1_solver.t = t1
-            self.case1_solver.theta = theta1
-            solutions_case1 = self.case1_solver.solve()
-            for sol in solutions_case1:
-                results.append(sol)
-                """
-                x1, x2 = sol[0]
-                y1, y2 = sol[1]
-                phi = sol[2]
-                xforms.put((((x1+x2)/2, (y1+y2)/2), phi))  # (P, phi)
-                """
-            #"""
-            
-            # 情况2：边在底边，对角在对边
-            #"""
-            self.case2_solver.t = t1
-            self.case2_solver.theta = theta1
-            solutions_case2 = self.case2_solver.solve()
-            for sol in solutions_case2:
-                results.append(sol)
-                """
-                x1, x2 = sol[0]
-                y1, y2 = sol[1]
-                phi = sol[2]
-                xforms.put((((x1+x2)/2, (y1+y2)/2), phi))  # (P, phi)
-                """
-            #"""
-            
-            # 情况3：三个顶点在三条边上
-            #"""
-            self.case3_solver.t = t1
-            self.case3_solver.theta = theta1
-            solutions_case3 = self.case3_solver.solve()
-            for sol in solutions_case3:
-                results.append(sol)
-                """
-                x1, x2 = sol[0]
-                y1, y2 = sol[1]
-                phi = sol[2]
-                xforms.put((((x1+x2)/2, (y1+y2)/2), phi))  # (P, phi)
-                """
-            #"""
+    def calculate_pose(self, t: list, theta: list):
+        """
+        计算位姿，t和theta长度均为3
+        """
+        self.case1_solver.t = t
+        self.case1_solver.theta = theta
+        self.case2_solver.t = t
+        self.case2_solver.theta = theta
+        self.case3_solver.t = t
+        self.case3_solver.theta = theta
 
-            #results.append((xforms, v_comb))
-        return results, all_v
+        results = []
+        results.extend(self.case1_solver.solve())
+        results.extend(self.case2_solver.solve())
+        results.extend(self.case3_solver.solve())
+        return results
     
     def filter_solutions(self, solutions: List[Dict], tol: float = None) -> List[Dict]:
         """
@@ -229,3 +165,22 @@ class PoseCalculator():
     def stop(self):
         """停止线程"""
         self.running = False
+    
+    def get_t_theta_from_sensor_data(self, t_sensor: np.ndarray, r: np.ndarray, delta: np.ndarray, theta: np.ndarray):
+        """
+        根据传感器数据和激光参数，计算每束激光的 t 和 theta
+        返回：t_list, theta_list
+        """
+        t_list = []
+        theta_list = []
+        for i in range(len(t_sensor)):
+            # 计算碰撞点向量
+            x = r[i]*np.cos(delta[i]) + t_sensor[i]*np.cos(theta[i])
+            y = r[i]*np.sin(delta[i]) + t_sensor[i]*np.sin(theta[i])
+            t_val = np.linalg.norm([x, y])
+            theta_val = np.arctan2(y, x)
+            if theta_val < 0:
+                theta_val += 2 * np.pi
+            t_list.append(t_val)
+            theta_list.append(theta_val)
+        return t_list, theta_list
