@@ -357,7 +357,7 @@ class MultiRobotVisualizer:
                     head_width=0.2, head_length=0.3,
                     fc='g', ec='g', alpha=0.7)
                 elements['estimate_arrows'].append(est_arrow)
-                
+                """
                 # 绘制解算向量
                 vector_segments = []
                 for vec in data['v']:
@@ -374,7 +374,7 @@ class MultiRobotVisualizer:
                         colors='g', linewidths=1.5, alpha=0.5)
                     self.ax.add_collection(vc)
                     elements['estimate_lines'].append(vc)
-            
+                """
             self.calculator_elements.append(elements)
         
         self.fig.canvas.draw_idle()

@@ -38,14 +38,17 @@ class RobotController(threading.Thread):
                 self.perform_localization()
                 
                 # 新增可视化更新
-                if hasattr(self, 'visualizer'):
+                if hasattr(self, 'visualizer') and self.visualizer is not None:
                     # 分别准备数据
                     robot_data = self.prepare_robot_data()
                     calculator_data = self.prepare_calculator_data()
                     
                     # 分别调用可视化函数
-                    self.visualizer.draw_robot_state(robot_data)
-                    self.visualizer.draw_calculator_state(calculator_data)
+                    try:
+                        self.visualizer.draw_robot_state(robot_data)
+                        self.visualizer.draw_calculator_state(calculator_data)
+                    except Exception as e:
+                        print(f"可视化更新错误: {e}")
                 
                 time.sleep(self.update_interval)
             except Exception as e:
