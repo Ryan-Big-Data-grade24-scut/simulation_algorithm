@@ -38,9 +38,50 @@ class RobotVisualizer:
         self._create_sliders()
 
         # 初始绘制
-        self._update_display(true_pose=(self.robot.x, self.robot.y, self.robot.phi))        
-    
+        self._update_display(true_pose=(self.robot.x, self.robot.y, self.robot.phi))            
 
+    def _create_sliders(self):
+        """创建X/Y/Phi滑动条"""
+        ax_x = plt.axes([0.25, 0.15, 0.65, 0.03])
+        ax_y = plt.axes([0.25, 0.10, 0.65, 0.03])
+        ax_phi = plt.axes([0.25, 0.05, 0.65, 0.03])
+        
+        self.slider_x = Slider(ax_x, 'X', 0, self.m, valinit=self.robot.x)
+        self.slider_y = Slider(ax_y, 'Y', 0, self.n, valinit=self.robot.y)
+        self.slider_phi = Slider(ax_phi, 'Phi', -np.pi, np.pi, valinit=self.robot.phi)
+        
+        # 绑定统一回调
+        for slider in [self.slider_x, self.slider_y, self.slider_phi]:
+            slider.on_changed(self._on_slider_changed)
+
+    def _on_slider_changed(self, val):
+        """
+        完全对应图片中的回调流程：
+        1. 更新机器人位姿
+        2. 获取扫描结果
+        3. 调用算法模块
+        4. 获取解算结果
+        5. 重新绘制
+        """
+        # 1. 更新机器人位姿
+        self.robot.update_pose(
+            x=self.slider_x.val,
+            y=self.slider_y.val,
+            phi=self.slider_phi.val
+        )
+        
+        # 2. 获取扫描结果
+        distances, angles = self.robot.scan()
+        
+        # 3. 调用算法模块
+        solutions = self.solver.solve(distances)
+        
+        # 4-5. 更新显示
+        self._update_display(
+            true_pose=(self.robot.x, self.robot.y, self.robot.phi),
+            solutions=solutions,
+            laser_data=(distances, angles)
+        )
 
     def _update_display(self, true_pose = None, solutions = None, laser_data = None):
         """更新显示（完全匹配图片中的回调流程）"""
@@ -88,7 +129,6 @@ class RobotVisualizer:
         distances, angles = laser_data
         self.laser_artists = []
         self.hit_markers = []
-        
         for (rel_r, rel_angle), laser_angle in self.robot.laser_configs:
             # 计算激光头位置
             laser_x = pose[0] + rel_r * np.cos(pose[2] + rel_angle)
@@ -114,7 +154,6 @@ class RobotVisualizer:
         """绘制解算结果（绿色+模拟激光束）"""
         self.solution_artists = []
         self.solution_lasers = []
-        
         for (x_range, y_range, sol_phi) in solutions:
             sol_x = sum(x_range) / 2
             sol_y = sum(y_range) / 2
@@ -143,52 +182,9 @@ class RobotVisualizer:
                     line = self.ax.plot(
                         [laser_x, laser_x + dist*np.cos(angle)],
                         [laser_y, laser_y + dist*np.sin(angle)],
-                        'g--', alpha=0.3
+                        'g-', alpha=0.5
                     )[0]
                     self.solution_lasers.append(line)
-
-    def _create_sliders(self):
-        """创建X/Y/Phi滑动条"""
-        ax_x = plt.axes([0.25, 0.15, 0.65, 0.03])
-        ax_y = plt.axes([0.25, 0.10, 0.65, 0.03])
-        ax_phi = plt.axes([0.25, 0.05, 0.65, 0.03])
-        
-        self.slider_x = Slider(ax_x, 'X', 0, self.m, valinit=self.robot.x)
-        self.slider_y = Slider(ax_y, 'Y', 0, self.n, valinit=self.robot.y)
-        self.slider_phi = Slider(ax_phi, 'Phi', -np.pi, np.pi, valinit=self.robot.phi)
-        
-        # 绑定统一回调
-        for slider in [self.slider_x, self.slider_y, self.slider_phi]:
-            slider.on_changed(self._on_slider_changed)
-
-    def _on_slider_changed(self, val):
-        """
-        完全对应图片中的回调流程：
-        1. 更新机器人位姿
-        2. 获取扫描结果
-        3. 调用算法模块
-        4. 获取解算结果
-        5. 重新绘制
-        """
-        # 1. 更新机器人位姿
-        self.robot.update_pose(
-            x=self.slider_x.val,
-            y=self.slider_y.val,
-            phi=self.slider_phi.val
-        )
-        
-        # 2. 获取扫描结果
-        distances, angles = self.robot.scan()
-        
-        # 3. 调用算法模块
-        solutions = self.solver.solve(distances, angles)
-        
-        # 4-5. 更新显示
-        self._update_display(
-            true_pose=(self.robot.x, self.robot.y, self.robot.phi),
-            solutions=solutions,
-            laser_data=(distances, angles)
-        )
 
     def _draw_boundaries(self):
         """绘制场地边界（根据VirtualRobot的默认设置）"""
