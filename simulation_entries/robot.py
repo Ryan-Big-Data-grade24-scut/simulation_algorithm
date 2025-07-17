@@ -24,8 +24,7 @@ class VirtualRobot:
             ((0, 0), (20, 0)),
             ((20, 0), (20, 10)),
             ((20, 10), (0, 10)),
-            ((0, 10), (0, 0)), 
-            ((2, 8), (8, 2))
+            ((0, 10), (0, 0))
         ]
         
         # 激光配置（按你给的默认值）
@@ -62,7 +61,7 @@ class VirtualRobot:
             
             distances.append(dist)
             global_angles.append(current_angle)
-        
+        print(distances)
         return np.array(distances), np.array(global_angles)
 
     def _raycast(self, x: float, y: float, angle: float) -> float:

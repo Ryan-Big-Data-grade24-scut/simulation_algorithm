@@ -4,17 +4,25 @@ from positioning_algorithm.pose_calculator import PoseSolver
 from matplotlib import pyplot as plt
 import numpy as np
 
-# 多束激光测试：
+# 四束激光测试：
 lsr_cfg = [
-    ((0.5, np.pi/2), np.pi/2),   # 左前传感器
-    ((0.5, np.pi), np.pi),        # 正前传感器
-    ((0.5, -np.pi/2), -np.pi/2), 
-    ((0.5, 0), 0)
+    ((0.5, 0), 0),                      # 0°
+    ((0.5, np.pi/2), np.pi/2),          # 90°
+    ((0.5, np.pi), np.pi),              # 180°
+    ((0.5, 3*np.pi/2), 3*np.pi/2)       # 270°
 ]
+
+# 你可以根据实际环境决定是否启用ROS日志
+enable_ros_logging = False
+ros_logger = None
 
 # 初始化（使用默认参数）
 robot = VirtualRobot(laser_configs=lsr_cfg)
-solver = PoseSolver(20, 10, robot.laser_configs)
+solver = PoseSolver(
+    20, 10, robot.laser_configs,
+    config=None,
+    ros_logger=ros_logger
+)
 viz = RobotVisualizer(robot, solver)
 
 # 显示界面
