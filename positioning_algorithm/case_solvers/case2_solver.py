@@ -363,7 +363,7 @@ class Case2Solver(BaseSolver):
                          p2: int,
                          opp_idx: int,
                          rect_edge: str) -> Optional[Tuple[Tuple[float, float], Tuple[float, float]]]:
-        """计算中心点坐标范围
+        """计算中心点坐标范围（考虑所有三个点的影响）
         
         Args:
             phi: 当前角度 (rad)
@@ -375,151 +375,158 @@ class Case2Solver(BaseSolver):
         Returns:
             Optional[Tuple]: 坐标范围 ((x_min,x_max), (y_min,y_max)) 或 None
         """
-        self.logger.info(f"\n    === 计算位置坐标范围 ===")
+        self.logger.info(f"\n    === 计算位置坐标范围 (改进版：考虑所有三点) ===")
         self.logger.info(f"    输入角度: phi = {phi:.8f} rad = {math.degrees(phi):.2f}°")
         self.logger.info(f"    基边顶点: P{p1}, P{p2}")
         self.logger.info(f"    对角顶点: P{opp_idx}")
         self.logger.info(f"    矩形边缘: {rect_edge}")
         
+        # 步骤1: 计算所有三个点旋转phi角度后的坐标
+        self.logger.info(f"    步骤1: 计算所有三个点旋转phi角度后的坐标")
+        points_coords = []
+        for i, point_idx in enumerate([p1, p2, opp_idx]):
+            point_name = "基边点1" if i == 0 else ("基边点2" if i == 1 else "对角点")
+            self.logger.info(f"      计算P{point_idx} ({point_name}):")
+            
+            # 计算旋转后的坐标
+            angle_sum = phi + self.theta[point_idx]
+            cos_val = math.cos(angle_sum)
+            sin_val = math.sin(angle_sum)
+            
+            x_coord = self.t[point_idx] * cos_val
+            y_coord = self.t[point_idx] * sin_val
+            
+            self.logger.info(f"        公式: x = t{point_idx} * cos(phi + θ{point_idx})")
+            self.logger.info(f"        代入: x = {self.t[point_idx]:.6f} * cos({phi:.6f} + {self.theta[point_idx]:.6f})")
+            self.logger.info(f"        计算: x = {self.t[point_idx]:.6f} * cos({angle_sum:.6f})")
+            self.logger.info(f"        计算: x = {self.t[point_idx]:.6f} * {cos_val:.8f}")
+            self.logger.info(f"        结果: x = {x_coord:.8f}")
+            
+            self.logger.info(f"        公式: y = t{point_idx} * sin(phi + θ{point_idx})")
+            self.logger.info(f"        代入: y = {self.t[point_idx]:.6f} * sin({phi:.6f} + {self.theta[point_idx]:.6f})")
+            self.logger.info(f"        计算: y = {self.t[point_idx]:.6f} * sin({angle_sum:.6f})")
+            self.logger.info(f"        计算: y = {self.t[point_idx]:.6f} * {sin_val:.8f}")
+            self.logger.info(f"        结果: y = {y_coord:.8f}")
+            
+            points_coords.append((x_coord, y_coord))
+        
+        # 步骤2: 计算旋转后三角形的边界框
+        self.logger.info(f"    步骤2: 计算旋转后三角形的边界框")
+        x_coords = [coord[0] for coord in points_coords]
+        y_coords = [coord[1] for coord in points_coords]
+        
+        triangle_x_min = min(x_coords)
+        triangle_x_max = max(x_coords)
+        triangle_y_min = min(y_coords)
+        triangle_y_max = max(y_coords)
+        
+        self.logger.info(f"      三角形x坐标范围: [{triangle_x_min:.8f}, {triangle_x_max:.8f}]")
+        self.logger.info(f"      三角形y坐标范围: [{triangle_y_min:.8f}, {triangle_y_max:.8f}]")
+        
+        # 步骤3: 根据基边所在矩形边确定中心点坐标范围
         if rect_edge in ['bottom', 'top']:
-            self.logger.info(f"    水平基边情况 (rect_edge={rect_edge})")
+            self.logger.info(f"    步骤3: 水平基边情况 (rect_edge={rect_edge})")
             
-            # 计算yO
+            # 计算固定的y坐标
             y_target = 0.0 if rect_edge == 'bottom' else self.n
-            self.logger.info(f"    步骤1: 计算中心点y坐标")
-            self.logger.info(f"      目标y坐标: y_target = {y_target} ({'底边' if rect_edge == 'bottom' else '顶边'})")
-            self.logger.info(f"      公式: yO = y_target - t{p1} * sin(phi + θ{p1})")
-            self.logger.info(f"      代入: yO = {y_target} - {self.t[p1]:.6f} * sin({phi:.6f} + {self.theta[p1]:.6f})")
+            self.logger.info(f"      基边位于: {'底边' if rect_edge == 'bottom' else '顶边'} (y = {y_target})")
             
+            # 使用基边点计算yO (保持原有逻辑的准确性)
             angle_sum = phi + self.theta[p1]
             sin_value = math.sin(angle_sum)
-            self.logger.info(f"      计算: yO = {y_target} - {self.t[p1]:.6f} * sin({angle_sum:.6f})")
-            self.logger.info(f"      计算: yO = {y_target} - {self.t[p1]:.6f} * {sin_value:.8f}")
-            
             term = self.t[p1] * sin_value
             yO = y_target - term
-            self.logger.info(f"      计算: yO = {y_target} - {term:.8f}")
+            
+            self.logger.info(f"      公式: yO = y_target - t{p1} * sin(phi + θ{p1})")
+            self.logger.info(f"      代入: yO = {y_target} - {self.t[p1]:.6f} * sin({phi:.6f} + {self.theta[p1]:.6f})")
+            self.logger.info(f"      计算: yO = {y_target} - {self.t[p1]:.6f} * {sin_value:.8f}")
             self.logger.info(f"      结果: yO = {yO:.8f}")
             
-            # 计算x范围
-            self.logger.info(f"    步骤2: 计算x坐标范围")
-            self.logger.info(f"      计算P{p1}的x坐标:")
-            self.logger.info(f"        公式: x_p1 = t{p1} * cos(phi + θ{p1})")
-            self.logger.info(f"        代入: x_p1 = {self.t[p1]:.6f} * cos({phi:.6f} + {self.theta[p1]:.6f})")
-            cos_value1 = math.cos(angle_sum)
-            self.logger.info(f"        计算: x_p1 = {self.t[p1]:.6f} * cos({angle_sum:.6f})")
-            self.logger.info(f"        计算: x_p1 = {self.t[p1]:.6f} * {cos_value1:.8f}")
-            x_p1 = self.t[p1] * cos_value1
-            self.logger.info(f"        结果: x_p1 = {x_p1:.8f}")
+            # 计算x范围约束：考虑所有三个点
+            self.logger.info(f"      计算x范围约束 (考虑所有三点):")
+            x_constraints = []
+            for i, (x_coord, _) in enumerate(points_coords):
+                point_idx = [p1, p2, opp_idx][i]
+                point_name = "基边点1" if i == 0 else ("基边点2" if i == 1 else "对角点")
+                
+                x_min_constraint = -x_coord
+                x_max_constraint = self.m - x_coord
+                x_constraints.append((x_min_constraint, x_max_constraint))
+                
+                self.logger.info(f"        P{point_idx} ({point_name}): x_coord = {x_coord:.8f}")
+                self.logger.info(f"          x_min约束: -x_coord = {x_min_constraint:.8f}")
+                self.logger.info(f"          x_max约束: m - x_coord = {self.m} - {x_coord:.8f} = {x_max_constraint:.8f}")
             
-            self.logger.info(f"      计算P{p2}的x坐标:")
-            angle_sum2 = phi + self.theta[p2]
-            self.logger.info(f"        公式: x_p2 = t{p2} * cos(phi + θ{p2})")
-            self.logger.info(f"        代入: x_p2 = {self.t[p2]:.6f} * cos({phi:.6f} + {self.theta[p2]:.6f})")
-            cos_value2 = math.cos(angle_sum2)
-            self.logger.info(f"        计算: x_p2 = {self.t[p2]:.6f} * cos({angle_sum2:.6f})")
-            self.logger.info(f"        计算: x_p2 = {self.t[p2]:.6f} * {cos_value2:.8f}")
-            x_p2 = self.t[p2] * cos_value2
-            self.logger.info(f"        结果: x_p2 = {x_p2:.8f}")
+            x_min = max(constraint[0] for constraint in x_constraints)
+            x_max = min(constraint[1] for constraint in x_constraints)
             
-            self.logger.info(f"      计算x范围约束:")
-            self.logger.info(f"        公式: x_min = max(-x_p1, -x_p2)")
-            self.logger.info(f"        代入: x_min = max(-({x_p1:.8f}), -({x_p2:.8f}))")
-            self.logger.info(f"        计算: x_min = max({-x_p1:.8f}, {-x_p2:.8f})")
-            x_min = max(-x_p1, -x_p2)
-            self.logger.info(f"        结果: x_min = {x_min:.8f}")
-            
-            self.logger.info(f"        公式: x_max = min(m - x_p1, m - x_p2)")
-            self.logger.info(f"        代入: x_max = min({self.m} - {x_p1:.8f}, {self.m} - {x_p2:.8f})")
-            self.logger.info(f"        计算: x_max = min({self.m - x_p1:.8f}, {self.m - x_p2:.8f})")
-            x_max = min(self.m - x_p1, self.m - x_p2)
-            self.logger.info(f"        结果: x_max = {x_max:.8f}")
+            self.logger.info(f"      最终x范围:")
+            self.logger.info(f"        x_min = max({[f'{c[0]:.8f}' for c in x_constraints]}) = {x_min:.8f}")
+            self.logger.info(f"        x_max = min({[f'{c[1]:.8f}' for c in x_constraints]}) = {x_max:.8f}")
             
             # 验证x范围有效性
             self.logger.info(f"      x范围有效性检查:")
-            self.logger.info(f"        判断条件: x_min ≤ x_max + tolerance")
-            self.logger.info(f"        比较: {x_min:.8f} ≤ {x_max:.8f} + {self.case_config.range_tolerance}")
-            x_max_adjusted = x_max + self.case_config.range_tolerance
-            self.logger.info(f"        判断: {x_min:.8f} ≤ {x_max_adjusted:.8f} ? {x_min <= x_max_adjusted}")
+            self.logger.info(f"        判断: {x_min:.8f} ≤ {x_max:.8f} + {self.case_config.range_tolerance}")
             
             if x_min > x_max + self.case_config.range_tolerance:
-                self.logger.info(f"        结论: x范围无效 ({x_min:.6f} > {x_max:.6f})")
+                self.logger.info(f"        结论: x范围无效")
                 return None
             else:
                 self.logger.info(f"        结论: x范围有效")
                 
-            self.logger.info(f"    === 位置计算完成 ===")
             self.logger.info(f"    最终结果: x范围=[{x_min:.8f}, {x_max:.8f}], y坐标={yO:.8f}")
             return ((x_min, x_max), (yO, yO))
             
-        else:
-            self.logger.info(f"    垂直基边情况 (rect_edge={rect_edge})")
+        else:  # rect_edge in ['left', 'right']
+            self.logger.info(f"    步骤3: 垂直基边情况 (rect_edge={rect_edge})")
             
-            # 计算xO
+            # 计算固定的x坐标
             x_target = 0.0 if rect_edge == 'left' else self.m
-            self.logger.info(f"    步骤1: 计算中心点x坐标")
-            self.logger.info(f"      目标x坐标: x_target = {x_target} ({'左边' if rect_edge == 'left' else '右边'})")
-            self.logger.info(f"      公式: xO = x_target - t{p1} * cos(phi + θ{p1})")
-            self.logger.info(f"      代入: xO = {x_target} - {self.t[p1]:.6f} * cos({phi:.6f} + {self.theta[p1]:.6f})")
+            self.logger.info(f"      基边位于: {'左边' if rect_edge == 'left' else '右边'} (x = {x_target})")
             
+            # 使用基边点计算xO (保持原有逻辑的准确性)
             angle_sum = phi + self.theta[p1]
             cos_value = math.cos(angle_sum)
-            self.logger.info(f"      计算: xO = {x_target} - {self.t[p1]:.6f} * cos({angle_sum:.6f})")
-            self.logger.info(f"      计算: xO = {x_target} - {self.t[p1]:.6f} * {cos_value:.8f}")
-            
             term = self.t[p1] * cos_value
             xO = x_target - term
-            self.logger.info(f"      计算: xO = {x_target} - {term:.8f}")
+            
+            self.logger.info(f"      公式: xO = x_target - t{p1} * cos(phi + θ{p1})")
+            self.logger.info(f"      代入: xO = {x_target} - {self.t[p1]:.6f} * cos({phi:.6f} + {self.theta[p1]:.6f})")
+            self.logger.info(f"      计算: xO = {x_target} - {self.t[p1]:.6f} * {cos_value:.8f}")
             self.logger.info(f"      结果: xO = {xO:.8f}")
             
-            # 计算y范围
-            self.logger.info(f"    步骤2: 计算y坐标范围")
-            self.logger.info(f"      计算P{p1}的y坐标:")
-            self.logger.info(f"        公式: y_p1 = t{p1} * sin(phi + θ{p1})")
-            self.logger.info(f"        代入: y_p1 = {self.t[p1]:.6f} * sin({phi:.6f} + {self.theta[p1]:.6f})")
-            sin_value1 = math.sin(angle_sum)
-            self.logger.info(f"        计算: y_p1 = {self.t[p1]:.6f} * sin({angle_sum:.6f})")
-            self.logger.info(f"        计算: y_p1 = {self.t[p1]:.6f} * {sin_value1:.8f}")
-            y_p1 = self.t[p1] * sin_value1
-            self.logger.info(f"        结果: y_p1 = {y_p1:.8f}")
+            # 计算y范围约束：考虑所有三个点
+            self.logger.info(f"      计算y范围约束 (考虑所有三点):")
+            y_constraints = []
+            for i, (_, y_coord) in enumerate(points_coords):
+                point_idx = [p1, p2, opp_idx][i]
+                point_name = "基边点1" if i == 0 else ("基边点2" if i == 1 else "对角点")
+                
+                y_min_constraint = -y_coord
+                y_max_constraint = self.n - y_coord
+                y_constraints.append((y_min_constraint, y_max_constraint))
+                
+                self.logger.info(f"        P{point_idx} ({point_name}): y_coord = {y_coord:.8f}")
+                self.logger.info(f"          y_min约束: -y_coord = {y_min_constraint:.8f}")
+                self.logger.info(f"          y_max约束: n - y_coord = {self.n} - {y_coord:.8f} = {y_max_constraint:.8f}")
             
-            self.logger.info(f"      计算P{p2}的y坐标:")
-            angle_sum2 = phi + self.theta[p2]
-            self.logger.info(f"        公式: y_p2 = t{p2} * sin(phi + θ{p2})")
-            self.logger.info(f"        代入: y_p2 = {self.t[p2]:.6f} * sin({phi:.6f} + {self.theta[p2]:.6f})")
-            sin_value2 = math.sin(angle_sum2)
-            self.logger.info(f"        计算: y_p2 = {self.t[p2]:.6f} * sin({angle_sum2:.6f})")
-            self.logger.info(f"        计算: y_p2 = {self.t[p2]:.6f} * {sin_value2:.8f}")
-            y_p2 = self.t[p2] * sin_value2
-            self.logger.info(f"        结果: y_p2 = {y_p2:.8f}")
+            y_min = max(constraint[0] for constraint in y_constraints)
+            y_max = min(constraint[1] for constraint in y_constraints)
             
-            self.logger.info(f"      计算y范围约束:")
-            self.logger.info(f"        公式: y_min = max(-y_p1, -y_p2)")
-            self.logger.info(f"        代入: y_min = max(-({y_p1:.8f}), -({y_p2:.8f}))")
-            self.logger.info(f"        计算: y_min = max({-y_p1:.8f}, {-y_p2:.8f})")
-            y_min = max(-y_p1, -y_p2)
-            self.logger.info(f"        结果: y_min = {y_min:.8f}")
-            
-            self.logger.info(f"        公式: y_max = min(n - y_p1, n - y_p2)")
-            self.logger.info(f"        代入: y_max = min({self.n} - {y_p1:.8f}, {self.n} - {y_p2:.8f})")
-            self.logger.info(f"        计算: y_max = min({self.n - y_p1:.8f}, {self.n - y_p2:.8f})")
-            y_max = min(self.n - y_p1, self.n - y_p2)
-            self.logger.info(f"        结果: y_max = {y_max:.8f}")
+            self.logger.info(f"      最终y范围:")
+            self.logger.info(f"        y_min = max({[f'{c[0]:.8f}' for c in y_constraints]}) = {y_min:.8f}")
+            self.logger.info(f"        y_max = min({[f'{c[1]:.8f}' for c in y_constraints]}) = {y_max:.8f}")
             
             # 验证y范围有效性
             self.logger.info(f"      y范围有效性检查:")
-            self.logger.info(f"        判断条件: y_min ≤ y_max + tolerance")
-            self.logger.info(f"        比较: {y_min:.8f} ≤ {y_max:.8f} + {self.case_config.range_tolerance}")
-            y_max_adjusted = y_max + self.case_config.range_tolerance
-            self.logger.info(f"        判断: {y_min:.8f} ≤ {y_max_adjusted:.8f} ? {y_min <= y_max_adjusted}")
+            self.logger.info(f"        判断: {y_min:.8f} ≤ {y_max:.8f} + {self.case_config.range_tolerance}")
             
             if y_min > y_max + self.case_config.range_tolerance:
-                self.logger.info(f"        结论: y范围无效 ({y_min:.6f} > {y_max:.6f})")
+                self.logger.info(f"        结论: y范围无效")
                 return None
             else:
                 self.logger.info(f"        结论: y范围有效")
                 
-            self.logger.info(f"    === 位置计算完成 ===")
             self.logger.info(f"    最终结果: x坐标={xO:.8f}, y范围=[{y_min:.8f}, {y_max:.8f}]")
             return ((xO, xO), (y_min, y_max))
 

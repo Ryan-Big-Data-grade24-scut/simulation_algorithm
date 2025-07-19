@@ -97,19 +97,19 @@ class PoseSolver:
                 tol=self.tol,
                 log_enabled=not self.config.enable_ros_logging,
                 log_file="logs/case1.log",
-                log_level="DEBUG"
+                log_level="INFO"
             ),
             BaseSolverConfig(
                 tol=self.tol,
                 log_enabled=not self.config.enable_ros_logging,
                 log_file="logs/case2.log",
-                log_level="DEBUG"
+                log_level="INFO"
             ),
             BaseSolverConfig(
                 tol=self.tol,
                 log_enabled=not self.config.enable_ros_logging,
                 log_file="logs/case3.log",
-                log_level="DEBUG"
+                log_level="INFO"
             )
         ]
 
@@ -361,17 +361,17 @@ class PoseSolver:
         case3_results = self._normalize_solution_angles(case3_results)
         self.logger.info("角度归一化完成")
         
-        # Case2与Case3冲突解决
-        if case2_results and case3_results:
-            self.logger.info("检测到Case2和Case3都有解，开始冲突检测...")
-            case3_results = self._remove_case3_case2_conflicts(case2_results, case3_results)
+        # 以Case2为基准进行冲突解决
+        if case2_results:
+            self.logger.info("以Case2为基准，检测并移除与Case1/Case3的重复解:")
+            case1_results, case3_results = self._remove_conflicts_with_case2(case1_results, case2_results, case3_results)
         else:
-            self.logger.info("无需进行Case2/Case3冲突检测")
+            self.logger.info("Case2无解，无需进行冲突检测")
         
         # 合并所有结果
         all_results = case1_results + case2_results + case3_results
         
-        self.logger.info(f"三算法求解汇总:")
+        self.logger.info(f"三算法求解汇总 (冲突解决后):")
         self.logger.info(f"  Case1: {len(case1_results)} 个解")
         self.logger.info(f"  Case2: {len(case2_results)} 个解")
         self.logger.info(f"  Case3: {len(case3_results)} 个解")
@@ -409,51 +409,87 @@ class PoseSolver:
             normalized_solutions.append((x_range, y_range, normalized_phi))
         return normalized_solutions
 
-    def _remove_case3_case2_conflicts(self, case2_solutions, case3_solutions):
+    def _remove_conflicts_with_case2(self, case1_solutions, case2_solutions, case3_solutions):
         """
-        移除与Case2解冲突的Case3解
+        以Case2为基准，移除与Case2相容的Case1和Case3解
         参数:
-            case2_solutions: Case2解列表
+            case1_solutions: Case1解列表
+            case2_solutions: Case2解列表  
             case3_solutions: Case3解列表
         返回:
-            过滤后的Case3解列表
+            (过滤后的Case1解列表, 过滤后的Case3解列表)
         """
-        if not case2_solutions or not case3_solutions:
-            return case3_solutions
+        if not case2_solutions:
+            return case1_solutions, case3_solutions
         
-        filtered_case3 = []
         tolerance = 1e-6  # 角度容忍度
         
-        self.logger.info("检测Case2与Case3冲突:")
+        # 用于标记要删除的解
+        case1_to_remove = set()
+        case3_to_remove = set()
         
-        for i, case3_sol in enumerate(case3_solutions):
-            is_duplicate = False
-            case3_x, case3_y, case3_phi = case3_sol
+        self.logger.info("遍历Case2解，检测与Case1/Case3的冲突:")
+        
+        for i, case2_sol in enumerate(case2_solutions):
+            case2_x, case2_y, case2_phi = case2_sol
+            self.logger.info(f"  Case2解{i+1}: {self._format_solution(case2_sol)}")
             
-            for j, case2_sol in enumerate(case2_solutions):
-                case2_x, case2_y, case2_phi = case2_sol
-                
-                # 检查角度是否近似相等
-                phi_diff = abs(case3_phi - case2_phi)
-                if phi_diff < tolerance or abs(phi_diff - 2*3.14159) < tolerance:
-                    # 检查位置范围是否重叠
-                    x_overlap = (case3_x[0] <= case2_x[1] + tolerance and 
-                               case2_x[0] <= case3_x[1] + tolerance)
-                    y_overlap = (case3_y[0] <= case2_y[1] + tolerance and 
-                               case2_y[0] <= case3_y[1] + tolerance)
+            # 检查与Case1的冲突
+            if case1_solutions:
+                self.logger.info(f"    检查与Case1解的冲突:")
+                for j, case1_sol in enumerate(case1_solutions):
+                    if j in case1_to_remove:
+                        continue
+                        
+                    case1_x, case1_y, case1_phi = case1_sol
                     
-                    if x_overlap and y_overlap:
-                        self.logger.info(f"  Case3解{i+1} 与 Case2解{j+1} 冲突，移除Case3解")
-                        self.logger.info(f"    Case3: {self._format_solution(case3_sol)}")
-                        self.logger.info(f"    Case2: {self._format_solution(case2_sol)}")
-                        is_duplicate = True
-                        break
+                    # 检查角度是否近似相等
+                    phi_diff = abs(case2_phi - case1_phi)
+                    if phi_diff < tolerance or abs(phi_diff - 2*3.14159) < tolerance:
+                        # 检查位置范围是否重叠
+                        x_overlap = (case2_x[0] <= case1_x[1] + tolerance and 
+                                   case1_x[0] <= case2_x[1] + tolerance)
+                        y_overlap = (case2_y[0] <= case1_y[1] + tolerance and 
+                                   case1_y[0] <= case2_y[1] + tolerance)
+                        
+                        if x_overlap and y_overlap:
+                            self.logger.info(f"      ✗ Case1解{j+1} 与 Case2解{i+1} 冲突，删除Case1解")
+                            self.logger.info(f"        Case1: {self._format_solution(case1_sol)}")
+                            case1_to_remove.add(j)
             
-            if not is_duplicate:
-                filtered_case3.append(case3_sol)
+            # 检查与Case3的冲突
+            if case3_solutions:
+                self.logger.info(f"    检查与Case3解的冲突:")
+                for k, case3_sol in enumerate(case3_solutions):
+                    if k in case3_to_remove:
+                        continue
+                        
+                    case3_x, case3_y, case3_phi = case3_sol
+                    
+                    # 检查角度是否近似相等
+                    phi_diff = abs(case2_phi - case3_phi)
+                    if phi_diff < tolerance or abs(phi_diff - 2*3.14159) < tolerance:
+                        # 检查位置范围是否重叠
+                        x_overlap = (case2_x[0] <= case3_x[1] + tolerance and 
+                                   case3_x[0] <= case2_x[1] + tolerance)
+                        y_overlap = (case2_y[0] <= case3_y[1] + tolerance and 
+                                   case3_y[0] <= case2_y[1] + tolerance)
+                        
+                        if x_overlap and y_overlap:
+                            self.logger.info(f"      ✗ Case3解{k+1} 与 Case2解{i+1} 冲突，删除Case3解")
+                            self.logger.info(f"        Case3: {self._format_solution(case3_sol)}")
+                            case3_to_remove.add(k)
         
-        self.logger.info(f"冲突检测完成: Case3从{len(case3_solutions)}个解减少到{len(filtered_case3)}个解")
-        return filtered_case3
+        # 过滤掉标记的解
+        filtered_case1 = [sol for i, sol in enumerate(case1_solutions) if i not in case1_to_remove]
+        filtered_case3 = [sol for i, sol in enumerate(case3_solutions) if i not in case3_to_remove]
+        
+        self.logger.info(f"冲突检测完成:")
+        self.logger.info(f"  Case1: {len(case1_solutions)}个解 → {len(filtered_case1)}个解 (删除{len(case1_to_remove)}个)")
+        self.logger.info(f"  Case3: {len(case3_solutions)}个解 → {len(filtered_case3)}个解 (删除{len(case3_to_remove)}个)")
+        self.logger.info(f"  Case2: 保持 {len(case2_solutions)}个解 (基准)")
+        
+        return filtered_case1, filtered_case3
 
     def _is_compatible(self, sol1, sol2):
         """
