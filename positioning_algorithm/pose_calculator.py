@@ -63,14 +63,23 @@ class PoseSolver:
         if self.config.enable_ros_logging:
             self.min_log_level = logging.WARNING  # 只输出WARNING及以上
         else:
-            self.min_log_level = logging.DEBUG    # 输出全部
+            self.min_log_level = logging.DEBUG
+
+        # 初始化标准日志器
+        self.logger = logging.getLogger("PoseSolver")
+        if not self.logger.hasHandlers():
+            handler = logging.FileHandler("logs/pose_solver.log", encoding="utf-8")
+            formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+        self.logger.setLevel(self.min_log_level)
 
         os.makedirs('logs', exist_ok=True)
         self._initialize_solvers()
         if self.ros_logger:
             self.ros_logger.info("PoseSolver initialized successfully")
         else:
-            logging.getLogger("PoseSolver").info("PoseSolver initialized successfully")
+            self.logger.info("PoseSolver initialized successfully")
 
     def _initialize_solvers(self):
         """初始化三种情况的求解器实例"""
@@ -124,12 +133,17 @@ class PoseSolver:
         try:
             # 参数校验
             if len(distances) != len(self.laser_config):
-                raise ValueError(f"距离数{len(distances)}与激光配置数{len(self.laser_config)}不匹配")
+                error_msg = f"距离数{len(distances)}与激光配置数{len(self.laser_config)}不匹配"
+                if self.ros_logger:
+                    self.ros_logger.error(error_msg)
+                else:
+                    self.logger.error(error_msg)
+                raise ValueError(error_msg)
             
             if self.ros_logger:
                 self.ros_logger.info(f"Start solving with {len(distances)} distances")
             else:
-                logging.getLogger("PoseSolver").info(f"Start solving with {len(distances)} distances")
+                self.logger.info(f"Start solving with {len(distances)} distances")
             
             # 1. 计算碰撞向量
             r, delta, theta = self._get_laser_params()
@@ -137,25 +151,26 @@ class PoseSolver:
             
             # 2. 生成激光组合
             combinations = self._generate_combinations(t_list, theta_list)
-            if self.ros_logger:
-                self.ros_logger.info(f"Generated {len(combinations)} laser combinations")
-            else:
-                logging.getLogger("PoseSolver").info(f"Generated {len(combinations)} laser combinations")
+            self.logger.info(f"Generated {len(combinations)} laser combinations")
             
             # 3. 多情况求解
             results = []
-            for t, theta in combinations:
+            for idx, (t, theta) in enumerate(combinations, 1):
+                self.logger.info(f"组合{idx}: t={t}, theta={theta}")
                 results.append(self._solve_three_cases(t, theta))
             
             # 4. 筛选最优解
             solutions = self._filter_solutions(results)
+            self.logger.info(f"筛选后有效解数量: {len(solutions)}")
+            for i, sol in enumerate(solutions, 1):
+                self.logger.info(f"Solution {i}: {sol}")
             return solutions
 
         except Exception as e:
             if self.ros_logger:
                 self.ros_logger.error(f"Solve failed: {str(e)}")
             else:
-                logging.getLogger("PoseSolver").error(f"Solve failed: {str(e)}")
+                self.logger.error(f"Solve failed: {str(e)}")
             raise
 
     def _get_laser_params(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -281,15 +296,63 @@ class PoseSolver:
         phi_diff = min(phi_diff, 2 * np.pi - phi_diff)
         return phi_diff <= self.tol
 
+    def _merge_compatible_solutions(self, sol1, sol2):
+        """
+        合并两个相容的解，返回平均后的解
+        参数:
+            sol1: ((xmin1,xmax1), (ymin1,ymax1), phi1)
+            sol2: ((xmin2,xmax2), (ymin2,ymax2), phi2)
+        返回:
+            merged_sol: 合并后的解
+        """
+        # x范围合并（取交集的中心扩展）
+        x_overlap_min = max(sol1[0][0], sol2[0][0])
+        x_overlap_max = min(sol1[0][1], sol2[0][1])
+        x_center = (x_overlap_min + x_overlap_max) / 2
+        x_half_width = (sol1[0][1] - sol1[0][0] + sol2[0][1] - sol2[0][0]) / 4
+        merged_x = (x_center - x_half_width, x_center + x_half_width)
+        
+        # y范围合并
+        y_overlap_min = max(sol1[1][0], sol2[1][0])
+        y_overlap_max = min(sol1[1][1], sol2[1][1])
+        y_center = (y_overlap_min + y_overlap_max) / 2
+        y_half_width = (sol1[1][1] - sol1[1][0] + sol2[1][1] - sol2[1][0]) / 4
+        merged_y = (y_center - y_half_width, y_center + y_half_width)
+        
+        # phi角度合并（考虑周期性）
+        phi1, phi2 = sol1[2], sol2[2]
+        phi_diff = abs(phi1 - phi2) % (2 * np.pi)
+        if phi_diff > np.pi:
+            phi_diff = 2 * np.pi - phi_diff
+            if phi1 > phi2:
+                phi2 += 2 * np.pi
+            else:
+                phi1 += 2 * np.pi
+        merged_phi = (phi1 + phi2) / 2
+        # 标准化到[0, 2π)
+        merged_phi = merged_phi % (2 * np.pi)
+        
+        return (merged_x, merged_y, merged_phi)
+
     def _filter_solutions(self, all_solutions):
         """
-        高效解筛选器（O(n^2)时间复杂度）
+        高效解筛选器，支持相容解合并（O(n^2)时间复杂度）
         参数:
             all_solutions: list[激光组合1的解列表, 激光组合2的解列表, ...]
         返回:
-            list[ [sol, 相容数量], ... ] 按相容数量降序排列
+            list[合并后的解] 按相容数量降序排列
         """
-        solutions = []  # 存储格式: [ [sol, count], ... ]
+        solutions = []  # 格式: [[sol, count, [相容解列表]], ...]
+        """
+        # 测试模式
+        for sol in all_solutions:
+            if not sol:
+                continue
+            self.logger.debug(f"当前激光组合解: {sol}")
+            solutions.extend(sol)
+        return solutions
+        """
+        self.logger.info(f"开始筛选所有解，总组合数: {len(all_solutions)}")
         
         for laser_solutions in all_solutions:
             for current_sol in laser_solutions:
@@ -297,26 +360,43 @@ class PoseSolver:
                 
                 # 在已有解中寻找相容解
                 for i in range(len(solutions)):
-                    existing_sol, count = solutions[i]
+                    existing_sol, count, compatible_sols = solutions[i]
                     if self._is_compatible(existing_sol, current_sol):
-                        solutions[i][1] += 1  # 增加相容计数
+                        # 增加相容计数并记录相容解
+                        compatible_sols.append(current_sol)
+                        solutions[i][1] += 1
+                        
+                        # 重新计算合并解
+                        merged_sol = existing_sol
+                        for comp_sol in compatible_sols:
+                            merged_sol = self._merge_compatible_solutions(merged_sol, comp_sol)
+                        solutions[i][0] = merged_sol
+                        
                         found_compatible = True
+                        self.logger.debug(f"解 {current_sol} 与已存在解相容，合并后: {merged_sol}")
                         break
                 
                 # 如果没有找到相容解，添加新解
                 if not found_compatible:
-                    solutions.append([current_sol, 1])
+                    solutions.append([current_sol, 1, []])
+                    self.logger.debug(f"添加新解: {current_sol}")
         
-        # 按相容数量降序排序
+        # 按相容数量排序
         solutions.sort(key=lambda x: -x[1])
-
-        if solutions[0][1] == len(all_solutions):
+        self.logger.info(f"筛选后解列表:")
+        for i, (sol, count, _) in enumerate(solutions):
+            self.logger.info(f"  解{i+1}(相容数:{count}): {sol}")
+        
+        # 优先返回完全相容的解
+        if solutions and solutions[0][1] == len(all_solutions):
+            self.logger.info("找到完全相容解")
             return [sol[0] for sol in solutions[:4] if sol[1] == len(all_solutions)]
         
         return [sol[0] for sol in solutions[:4]]
 
 
 def _test_pose_solver():
+
     """PoseSolver 测试函数"""
     import sys
     sys.path.append('/home/lrx/laser_positioning_ubuntu/simulation_algorithm/positioning_algorithm')
