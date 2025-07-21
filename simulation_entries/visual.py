@@ -2,12 +2,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider
 from typing import List, Tuple
-from positioning_algorithm.pose_calculator import PoseSolver
+from positioning_algorithm.batch_pose_calculator import PoseSolver
 from .robot import VirtualRobot
 
 
 class RobotVisualizer:
-    def __init__(self, robot: VirtualRobot, solver: PoseSolver, m: float = 20, n: float = 10):
+    def __init__(self, robot: VirtualRobot, solver: PoseSolver, m: float = 10, n: float = 20):
         """
         初始化包含：
         - 创建matplotlib图形

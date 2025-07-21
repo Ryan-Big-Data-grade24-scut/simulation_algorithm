@@ -3,7 +3,7 @@ import os
 import glob
 from simulation_entries.robot import VirtualRobot 
 from simulation_entries.visual import  RobotVisualizer
-from positioning_algorithm.pose_calculator import PoseSolver
+from positioning_algorithm.batch_pose_calculator import PoseSolver
 from matplotlib import pyplot as plt
 import numpy as np
 
@@ -28,7 +28,7 @@ ros_logger = None
 # 初始化（使用默认参数）
 robot = VirtualRobot(laser_configs=lsr_cfg)
 solver = PoseSolver(
-    20, 10, robot.laser_configs,
+    10, 20, robot.laser_configs,
     config=None,
     ros_logger=ros_logger
 )
