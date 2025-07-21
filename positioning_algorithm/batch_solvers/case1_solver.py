@@ -101,43 +101,98 @@ class Case1BatchSolver:
             else:
                 self.logger.warning(title)
     
-    def _log_array_structure(self, name: str, arr: np.ndarray, max_elements: int = 5):
-        """结构化输出数组信息，避免冗长的np.float64输出"""
-        if arr.size == 0:
-            self._log_debug(f"{name}", "空数组")
+    def _log_array_detailed(self, name: str, arr):
+        """详细结构化输出数组的每个元素"""
+        if isinstance(arr, list):
+            if len(arr) == 0:
+                self._log_debug(name, "空列表")
+                return
+            
+            self._log_debug(f"{name} 详细内容", f"列表长度: {len(arr)}")
+            for i, item in enumerate(arr):
+                self._log_debug(f"{name}[{i}]", f"{item}")
+        
+        elif isinstance(arr, np.ndarray):
+            if arr.size == 0:
+                self._log_debug(name, "空数组")
+                return
+            
+            self._log_debug(f"{name} 详细内容", f"形状: {arr.shape}, 类型: {arr.dtype.name}")
+            
+            if arr.ndim == 1:
+                # 一维数组：逐个显示
+                for i in range(len(arr)):
+                    self._log_debug(f"{name}[{i}]", f"{arr[i]}")
+            
+            elif arr.ndim == 2:
+                # 二维数组：按行显示
+                for i in range(arr.shape[0]):
+                    self._log_debug(f"{name}[{i}]", f"{arr[i]}")
+            
+            elif arr.ndim == 3:
+                # 三维数组：分层显示
+                for i in range(arr.shape[0]):
+                    self._log_debug(f"{name}[{i}] 形状{arr[i].shape}", "")
+                    for j in range(arr.shape[1]):
+                        self._log_debug(f"  {name}[{i}][{j}]", f"{arr[i][j]}")
+            
+            else:
+                # 更高维数组：显示基本信息和前几个元素
+                self._log_debug(f"{name}", f"高维数组 {arr.shape}，显示前5个元素:")
+                flat_arr = arr.flatten()
+                for i in range(min(5, len(flat_arr))):
+                    self._log_debug(f"{name}.flat[{i}]", f"{flat_arr[i]}")
+        
+        else:
+            self._log_debug(name, f"类型: {type(arr)}, 内容: {arr}")
+
+    def _log_array(self, name: str, arr, show_content: bool = True):
+        """简单的数组/列表日志打印函数"""
+        # 处理列表类型：直接打印列表信息，不转换
+        if isinstance(arr, list):
+            if len(arr) == 0:
+                self._log_debug(name, "空列表")
+                return
+            
+            info = f"列表长度{len(arr)}"
+            
+            # 内容预览（列表直接显示前几个元素）
+            if show_content and len(arr) <= 5:
+                content_preview = str(arr)
+                if len(content_preview) > 200:  # 如果内容太长就截断
+                    content_preview = content_preview[:200] + "..."
+                info += f", 内容{content_preview}"
+            elif show_content:
+                # 显示前几个元素的类型信息
+                sample_types = [type(item).__name__ for item in arr[:3]]
+                info += f", 前3个元素类型{sample_types}"
+                for item in arr:
+                    self._log_debug(name, f"{item}")
+            
+            self._log_debug(name, info)
             return
         
-        # 基本信息
-        shape_str = f"形状{arr.shape}, 类型{arr.dtype.name}"
+        # 处理numpy数组：原有逻辑
+        if arr.size == 0:
+            self._log_debug(name, "空数组")
+            return
         
-        # 统计信息
-        if arr.size > 0 and np.issubdtype(arr.dtype, np.number):
+        # 基本信息：形状和类型
+        info = f"形状{arr.shape}, 类型{arr.dtype.name}"
+        
+        # 数值统计（仅对数值类型）
+        if np.issubdtype(arr.dtype, np.number):
             if np.all(np.isfinite(arr)):
-                stats = f"范围[{arr.min():.3f}, {arr.max():.3f}]"
+                info += f", 范围[{arr.min():.3f}, {arr.max():.3f}]"
             else:
-                finite_count = np.sum(np.isfinite(arr))
-                stats = f"有限值{finite_count}/{arr.size}个"
-        else:
-            stats = ""
+                valid_count = np.sum(np.isfinite(arr))
+                info += f", 有效值{valid_count}/{arr.size}"
         
-        # 内容预览
-        if arr.size <= max_elements:
-            if arr.ndim == 1:
-                content = "[" + ", ".join(f"{x:.3f}" if isinstance(x, (int, float, np.number)) else str(x) 
-                                        for x in arr.flat) + "]"
-            else:
-                content = f"前{min(max_elements, arr.shape[0])}行显示"
-        else:
-            content = f"显示前{max_elements}个元素"
-        
-        # 组合输出
-        full_info = f"{shape_str}"
-        if stats:
-            full_info += f", {stats}"
-        if content and arr.size <= max_elements * 2:  # 只在元素不太多时显示内容
-            full_info += f", 内容: {content}"
-        
-        self._log_debug(name, full_info)
+        # 内容预览（可选）
+        if show_content and arr.size <= 10:
+            for item in arr.flat:
+                self._log_debug(name, f"{item}")
+        self._log_debug(name, info)
     
     def solve(self, combinations: np.ndarray) -> np.ndarray:
         """
@@ -155,7 +210,7 @@ class Case1BatchSolver:
         self._log_info("=" * 60)
         
         # 输入验证和日志
-        self._log_array_structure("输入组合数组", combinations)
+        self._log_array("输入组合数组", combinations, show_content=False)
         
         if len(combinations) == 0:
             self._log_warning("没有组合可求解")
@@ -167,14 +222,14 @@ class Case1BatchSolver:
         # 步骤1: 扩展组合 N_cbn -> 3*N_cbn，并跟踪原始编号
         self._log_debug("步骤1: 开始组合扩展")
         expanded_combinations, combo_indices = self._expand_combinations(combinations)
-        self._log_array_structure("扩展后组合", expanded_combinations)
-        self._log_array_structure("组合索引追踪", combo_indices)
+        # self._log_array_detailed("扩展后组合", expanded_combinations)
+        # self._log_array_detailed("组合索引追踪", combo_indices)
         
         # 步骤2: 分水平边和竖直边计算A、B系数
         self._log_debug("步骤2: 开始计算A、B系数")
         ab_h, ab_v = self._compute_ab_coefficients(expanded_combinations)
-        self._log_array_structure("水平边A、B系数", ab_h)
-        self._log_array_structure("竖直边A、B系数", ab_v)
+        self._log_array("水平边A、B系数", ab_h, show_content=False)
+        self._log_array("竖直边A、B系数", ab_v, show_content=False)
         
         # 步骤3: 计算phi候选
         self._log_debug("步骤3: 开始计算phi候选")
@@ -183,19 +238,25 @@ class Case1BatchSolver:
         valid_phi_h = np.sum(~np.isinf(phi_h))
         valid_phi_v = np.sum(~np.isinf(phi_v))
         self._log_info("phi候选统计", f"水平边: {valid_phi_h}个有效值, 竖直边: {valid_phi_v}个有效值")
+        # self._log_array_detailed("水平边phi", phi_h)
+        # self._log_array_detailed("竖直边phi", phi_v)
         
         # 步骤4: 计算碰撞三角形
         self._log_debug("步骤4: 开始计算碰撞三角形")
         colli_h, valid_indice_cbo_h = self._compute_collision_triangles_h(phi_h, expanded_combinations, combo_indices)
         colli_v, valid_indice_cbo_v = self._compute_collision_triangles_v(phi_v, expanded_combinations, combo_indices)
         self._log_info("碰撞三角形统计", f"水平边: {len(colli_h)}个, 竖直边: {len(colli_v)}个")
+        # self._log_array_detailed("水平边碰撞三角形", colli_h)
+        # self._log_array_detailed("水平边对应组合编号", valid_indice_cbo_h)
+        # self._log_array_detailed("竖直边碰撞三角形", colli_v)
+        # self._log_array_detailed("竖直边对应组合编号", valid_indice_cbo_v)
         
         # 步骤5: 计算关键量
         self._log_debug("步骤5: 开始计算关键量")
         key_h = self._compute_key_quantities_h(colli_h)
         key_v = self._compute_key_quantities_v(colli_v)
-        self._log_array_structure("水平边关键量", key_h)
-        self._log_array_structure("竖直边关键量", key_v)
+        self._log_array("水平边关键量", key_h, show_content=False)
+        self._log_array("竖直边关键量", key_v, show_content=False)
         
         # 步骤6: 求解
         self._log_debug("步骤6: 开始求解两种情况")
@@ -203,6 +264,7 @@ class Case1BatchSolver:
                                                  valid_indice_cbo_h, valid_indice_cbo_v,
                                                  phi_h, phi_v)
         self._log_info("求解结果统计", f"找到{len(sols)}个候选解")
+        # self._log_array_detailed("候选解", sols)
         
         # 步骤7: 组织结果到sol_cbn
         self._log_debug("步骤7: 开始组织最终解")
@@ -333,7 +395,7 @@ class Case1BatchSolver:
                 continue
             elif abs(A) < self.tolerance:
                 # A接近0的特殊情况
-                phi = 0.0 if B > 0 else np.pi
+                phi = -np.pi/2 if B > 0 else np.pi/2
                 phi_v[i, 0] = phi
                 phi_v[i, 1] = phi + np.pi
             else:
@@ -613,7 +675,7 @@ class Case1BatchSolver:
         # 判断t1是否等于n或-n (加减tol)
         if abs(abs(t1) - self.n) <= self.tolerance:
             # t1 == ±n的情况：不存在center，直接计算边界
-            y_center = (self.n - yp0 - yp1) / 2
+            y_center = (self.n - yp1 - yp2) / 2
             x_max = self.m - max(xp0, xp1, xp2)
             x_min = 0 - min(xp0, xp1, xp2)
             
@@ -680,7 +742,7 @@ class Case1BatchSolver:
         # 判断t1是否等于m或-m (加减tol) (注意：竖直边对应m)
         if abs(abs(t1) - self.m) <= self.tolerance:
             # t1 == ±m的情况：不存在center，直接计算边界
-            x_center = (self.m - xp0 - xp1) / 2
+            x_center = (self.m - xp1 - xp2) / 2
             y_max = self.n - max(yp0, yp1, yp2)
             y_min = 0 - min(yp0, yp1, yp2)
             

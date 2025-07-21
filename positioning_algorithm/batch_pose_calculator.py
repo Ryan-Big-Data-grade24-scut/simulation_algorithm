@@ -113,18 +113,20 @@ class PoseSolver:
         # 4. 创建可扩展的解列表，预分配空间（N_cbn组合的解）
         N_cbn = len(combinations)
         solutions = [[] for _ in range(N_cbn)]  # 最终解列表，每个解为 (x, y, phi)
-        
+        case1_solutions = [[] for _ in range(N_cbn)]  # Case1求解器的解
+        case3_solutions = [[] for _ in range(N_cbn)]  # Case3求解器的解
         # 5. 使用Case1求解器求解
-        case1_solutions = self.case1_solver.solve(combinations)  # 返回 (N_cbn, 5) 格式
-        
+        #case1_solutions = self.case1_solver.solve(combinations)  # 返回 (N_cbn, 5) 格式
+        case3_solutions = self.case3_solver.solve(combinations)
+        #"""
         # 6. 按照对应的cbn编号，处理case1_solutions并extend solutions列表
         for cbn_idx in range(N_cbn):
             # 获取当前组合的解
             solutions[cbn_idx].extend(case1_solutions[cbn_idx])
-        
+            solutions[cbn_idx].extend(case3_solutions[cbn_idx])
+        #"""
         # 7. 未来将启用其他case求解器
         # case2_solutions = self.case2_solver.solve(combinations)  
-        # case3_solutions = self.case3_solver.solve(combinations)
         
         self.logger.info(f"求解完成，共找到 {len(solutions)} 个解")
         solutions = [sol for sublist in solutions for sol in sublist]  # 扁平化解列表
