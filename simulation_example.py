@@ -28,11 +28,11 @@ ros_logger = None
 # 初始化（使用默认参数）
 robot = VirtualRobot(laser_configs=lsr_cfg)
 solver = PoseSolver(
-    10, 20, robot.laser_configs,
+    20, 10, robot.laser_configs,
     config=None,
     ros_logger=ros_logger
 )
-viz = RobotVisualizer(robot, solver)
+viz = RobotVisualizer(robot, solver, m = 20, n = 10)
 
 # 显示界面
 plt.show()

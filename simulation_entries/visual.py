@@ -7,7 +7,7 @@ from .robot import VirtualRobot
 
 
 class RobotVisualizer:
-    def __init__(self, robot: VirtualRobot, solver: PoseSolver, m: float = 10, n: float = 20):
+    def __init__(self, robot: VirtualRobot, solver: PoseSolver, m: float = 20, n: float = 10):
         """
         初始化包含：
         - 创建matplotlib图形

@@ -51,7 +51,14 @@ class PoseSolver:
         # 导入批处理求解器
         from .batch_solvers import trig_cache, Case1BatchSolver, Case2BatchSolver, Case3BatchSolver
         self.trig_cache = trig_cache
-        self.case1_solver = Case1BatchSolver(m, n, self.config.tolerance)
+        
+        # 判断是否启用ROS日志
+        enable_ros_logging = ros_logger is not None
+        
+        # 创建求解器时传递日志参数
+        self.case1_solver = Case1BatchSolver(m, n, self.config.tolerance, 
+                                           enable_ros_logging=enable_ros_logging, 
+                                           ros_logger=ros_logger)
         self.case2_solver = Case2BatchSolver(m, n, self.config.tolerance)
         self.case3_solver = Case3BatchSolver(m, n, self.config.tolerance)
         
@@ -105,7 +112,7 @@ class PoseSolver:
         
         # 4. 创建可扩展的解列表，预分配空间（N_cbn组合的解）
         N_cbn = len(combinations)
-        solutions = []  # 最终解列表，每个解为 (x, y, phi)
+        solutions = [[] for _ in range(N_cbn)]  # 最终解列表，每个解为 (x, y, phi)
         
         # 5. 使用Case1求解器求解
         case1_solutions = self.case1_solver.solve(combinations)  # 返回 (N_cbn, 5) 格式
@@ -113,19 +120,14 @@ class PoseSolver:
         # 6. 按照对应的cbn编号，处理case1_solutions并extend solutions列表
         for cbn_idx in range(N_cbn):
             # 获取当前组合的解
-            sol_data = case1_solutions[cbn_idx]  # [xmin, xmax, ymin, ymax, phi]
-            
-            # 检查是否有有效解（phi不为np.inf表示有解）
-            if sol_data[4] != np.inf:  # phi值在第4个位置
-                x_min, x_max, y_min, y_max, phi = sol_data
-                # 添加解到列表中
-                solutions.append(((x_min, x_max), (y_min, y_max), phi))
+            solutions[cbn_idx].extend(case1_solutions[cbn_idx])
         
         # 7. 未来将启用其他case求解器
         # case2_solutions = self.case2_solver.solve(combinations)  
         # case3_solutions = self.case3_solver.solve(combinations)
         
         self.logger.info(f"求解完成，共找到 {len(solutions)} 个解")
+        solutions = [sol for sublist in solutions for sol in sublist]  # 扁平化解列表
         return solutions
     
     def _calculate_collision_vectors(self, distances: np.ndarray) -> np.ndarray:

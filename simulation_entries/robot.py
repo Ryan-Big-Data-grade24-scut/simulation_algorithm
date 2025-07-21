@@ -6,6 +6,8 @@ class VirtualRobot:
                  x: float = 5.0, 
                  y: float = 5.0, 
                  phi: float = np.pi/4,
+                 m: float = 20.0,
+                 n: float = 10.0,
                  boundary_lines: List[Tuple[Tuple[float, float], Tuple[float, float]]] = None,
                  laser_configs: List[Tuple[Tuple[float, float], float]] = None):
         """
@@ -21,10 +23,10 @@ class VirtualRobot:
         
         # 环境配置（按你给的默认值）
         self.boundary_lines = boundary_lines or [
-            ((0, 0), (10, 0)),
-            ((10, 0), (10, 20)),
-            ((10, 20), (0, 20)),
-            ((0, 20), (0, 0))
+            ((0, 0), (m, 0)),
+            ((m, 0), (m, n)),
+            ((m, n), (0, n)),
+            ((0, n), (0, 0))
         ]
         
         # 激光配置（按你给的默认值）
