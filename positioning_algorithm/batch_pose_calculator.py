@@ -128,8 +128,8 @@ class PoseSolver:
         # 7. 未来将启用其他case求解器
         # case2_solutions = self.case2_solver.solve(combinations)  
         
-        self.logger.info(f"求解完成，共找到 {len(solutions)} 个解")
         solutions = [sol for sublist in solutions for sol in sublist]  # 扁平化解列表
+        self.logger.info(f"求解完成，共找到 {len(solutions)} 个解, 第一个解为 {solutions[0]}")
         return solutions
     
     def _calculate_collision_vectors(self, distances: np.ndarray) -> np.ndarray:

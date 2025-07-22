@@ -240,8 +240,8 @@ class Case3BatchSolver:
         
         # 第六层：计算碰撞
         self._log_debug("第六层: 开始计算碰撞")
-        colli_h, colli_indice_h = self._compute_collision_h(phi_h, expanded_combinations, indice_ex)
-        colli_v, colli_indice_v = self._compute_collision_v(phi_v, expanded_combinations, indice_ex)
+        colli_h, colli_indice_h, phi_h_flat = self._compute_collision_h(phi_h, expanded_combinations, indice_ex)
+        colli_v, colli_indice_v, phi_v_flat = self._compute_collision_v(phi_v, expanded_combinations, indice_ex)
         
         # 第七层：计算关键量
         self._log_debug("第七层: 开始计算关键量")
@@ -250,18 +250,16 @@ class Case3BatchSolver:
         
         # 第八层：求解
         self._log_debug("第八层: 开始求解")
-        sols_h, indice_sol_h = self._solve_h(key_h, colli_h, colli_indice_h)
-        sols_v, indice_sol_v = self._solve_v(key_v, colli_v, colli_indice_v)
+        sols_h, indice_sol_h = self._solve_h(key_h, colli_h, colli_indice_h, phi_h_flat)
+        sols_v, indice_sol_v = self._solve_v(key_v, colli_v, colli_indice_v, phi_v_flat)
         
         # 合并水平和竖直的解
-        all_sols = []
-        all_indice = []
-        if len(sols_h) > 0:
-            all_sols.extend(sols_h)
-            all_indice.extend(indice_sol_h)
-        if len(sols_v) > 0:
-            all_sols.extend(sols_v)
-            all_indice.extend(indice_sol_v)
+        all_sols = np.vstack([sols_h, sols_v]) if len(sols_h) > 0 and len(sols_v) > 0 else (
+            sols_h if len(sols_h) > 0 else sols_v if len(sols_v) > 0 else np.zeros((0, 5))
+        )
+        all_indice = np.concatenate([indice_sol_h, indice_sol_v]) if len(indice_sol_h) > 0 and len(indice_sol_v) > 0 else (
+            indice_sol_h if len(indice_sol_h) > 0 else indice_sol_v if len(indice_sol_v) > 0 else np.array([], dtype=int)
+        )
         
         # 第九层：组织解
         self._log_debug("第九层: 开始组织解")
@@ -638,51 +636,54 @@ class Case3BatchSolver:
             
         Returns:
             tuple: (colli_h, colli_indice_h)
-            - colli_h: 水平碰撞结果 (12*N_cbn, 3)  - 每行为[x0, x1, x2]
+            - colli_h: 水平碰撞结果 (12*N_cbn, 3, 2)  - 每行为[[x0,y0], [x1,y1], [x2,y2]]
             - colli_indice_h: 对应的原始组合编号 (12*N_cbn,)
         """
-        self._log_debug("第六层水平: 计算碰撞三角形")
+        self._log_debug("第六层水平: 批量计算碰撞三角形")
         
         N_expanded = len(phi_h)  # 6*N_cbn
-        N_triangles = N_expanded * 2  # 12*N_cbn，每个扩展组合有2个phi值
         
-        # 初始化结果数组
-        colli_h = np.zeros((N_triangles, 3))  # 存储三个顶点的x坐标
-        colli_indice_h = np.zeros(N_triangles, dtype=int)
+        # 批量处理：将phi重塑为 (12*N_cbn,) 
+        phi_flat = phi_h.flatten()  # (12*N_cbn,)
         
-        # 遍历每个扩展组合的每个phi值
-        triangle_idx = 0
-        for i in range(N_expanded):
-            for j in range(2):  # 每个phi有两个解
-                phi = phi_h[i, j]
-                
-                # 只处理有效的phi值
-                if np.isfinite(phi):
-                    # 提取当前组合的激光参数
-                    t0, theta0 = expanded_combinations[i, 0, :]
-                    t1, theta1 = expanded_combinations[i, 1, :]
-                    t2, theta2 = expanded_combinations[i, 2, :]
-                    
-                    # 计算三个顶点的x坐标
-                    x0 = t0 * np.cos(phi + theta0)
-                    x1 = t1 * np.cos(phi + theta1)
-                    x2 = t2 * np.cos(phi + theta2)
-                    
-                    # 存储结果
-                    colli_h[triangle_idx] = [x0, x1, x2]
-                    colli_indice_h[triangle_idx] = indice_ex[i]
-                    
-                triangle_idx += 1
+        # 重复expanded_combinations以匹配phi的数量
+        # 每个扩展组合需要重复2次（对应2个phi值）
+        combinations_repeated = np.repeat(expanded_combinations, 2, axis=0)  # (12*N_cbn, 3, 2)
+        indice_repeated = np.repeat(indice_ex, 2)  # (12*N_cbn,)
         
-        # 只返回有效的三角形（去掉无效phi产生的零行）
-        valid_mask = ~np.all(colli_h == 0, axis=1)
-        colli_h = colli_h[valid_mask]
-        colli_indice_h = colli_indice_h[valid_mask]
+        # 只处理有效的phi值
+        valid_mask = np.isfinite(phi_flat)
+        valid_count = np.sum(valid_mask)
+        
+        if valid_count == 0:
+            return np.zeros((0, 3, 2)), np.array([], dtype=int), np.array([])
+        
+        # 提取有效数据
+        valid_phi = phi_flat[valid_mask]  # (N_valid,)
+        valid_combinations = combinations_repeated[valid_mask]  # (N_valid, 3, 2)
+        valid_indices = indice_repeated[valid_mask]  # (N_valid,)
+        
+        # 批量计算所有三角形的坐标
+        # valid_combinations形状: (N_valid, 3, 2) -> t和theta
+        t_values = valid_combinations[:, :, 0]  # (N_valid, 3) - t0, t1, t2
+        theta_values = valid_combinations[:, :, 1]  # (N_valid, 3) - theta0, theta1, theta2
+        
+        # 广播计算：phi + theta
+        # valid_phi[:, None]: (N_valid, 1)
+        # theta_values: (N_valid, 3)
+        phi_plus_theta = valid_phi[:, None] + theta_values  # (N_valid, 3)
+        
+        # 批量计算x和y坐标
+        x_coords = t_values * np.cos(phi_plus_theta)  # (N_valid, 3)
+        y_coords = t_values * np.sin(phi_plus_theta)  # (N_valid, 3)
+        
+        # 组合为 (N_valid, 3, 2) 的形式：[[x0,y0], [x1,y1], [x2,y2]]
+        colli_h = np.stack([x_coords, y_coords], axis=2)  # (N_valid, 3, 2)
         
         self._log_debug("第六层水平完成", 
-                       f"生成{len(colli_h)}个有效碰撞三角形，原始形状: ({N_triangles}, 3)")
+                       f"生成{len(colli_h)}个有效碰撞三角形，形状: {colli_h.shape}")
         
-        return colli_h, colli_indice_h
+        return colli_h, valid_indices, valid_phi
     
     def _compute_collision_v(self, phi_v: np.ndarray, expanded_combinations: np.ndarray, 
                            indice_ex: np.ndarray) -> tuple:
@@ -696,51 +697,54 @@ class Case3BatchSolver:
             
         Returns:
             tuple: (colli_v, colli_indice_v)
-            - colli_v: 竖直碰撞结果 (12*N_cbn, 3)  - 每行为[y0, y1, y2]
+            - colli_v: 竖直碰撞结果 (12*N_cbn, 3, 2)  - 每行为[[x0,y0], [x1,y1], [x2,y2]]
             - colli_indice_v: 对应的原始组合编号 (12*N_cbn,)
         """
-        self._log_debug("第六层竖直: 计算碰撞三角形")
+        self._log_debug("第六层竖直: 批量计算碰撞三角形")
         
         N_expanded = len(phi_v)  # 6*N_cbn
-        N_triangles = N_expanded * 2  # 12*N_cbn，每个扩展组合有2个phi值
         
-        # 初始化结果数组
-        colli_v = np.zeros((N_triangles, 3))  # 存储三个顶点的y坐标
-        colli_indice_v = np.zeros(N_triangles, dtype=int)
+        # 批量处理：将phi重塑为 (12*N_cbn,) 
+        phi_flat = phi_v.flatten()  # (12*N_cbn,)
         
-        # 遍历每个扩展组合的每个phi值
-        triangle_idx = 0
-        for i in range(N_expanded):
-            for j in range(2):  # 每个phi有两个解
-                phi = phi_v[i, j]
-                
-                # 只处理有效的phi值
-                if np.isfinite(phi):
-                    # 提取当前组合的激光参数
-                    t0, theta0 = expanded_combinations[i, 0, :]
-                    t1, theta1 = expanded_combinations[i, 1, :]
-                    t2, theta2 = expanded_combinations[i, 2, :]
-                    
-                    # 计算三个顶点的y坐标
-                    y0 = t0 * np.sin(phi + theta0)
-                    y1 = t1 * np.sin(phi + theta1)
-                    y2 = t2 * np.sin(phi + theta2)
-                    
-                    # 存储结果
-                    colli_v[triangle_idx] = [y0, y1, y2]
-                    colli_indice_v[triangle_idx] = indice_ex[i]
-                    
-                triangle_idx += 1
+        # 重复expanded_combinations以匹配phi的数量
+        # 每个扩展组合需要重复2次（对应2个phi值）
+        combinations_repeated = np.repeat(expanded_combinations, 2, axis=0)  # (12*N_cbn, 3, 2)
+        indice_repeated = np.repeat(indice_ex, 2)  # (12*N_cbn,)
         
-        # 只返回有效的三角形（去掉无效phi产生的零行）
-        valid_mask = ~np.all(colli_v == 0, axis=1)
-        colli_v = colli_v[valid_mask]
-        colli_indice_v = colli_indice_v[valid_mask]
+        # 只处理有效的phi值
+        valid_mask = np.isfinite(phi_flat)
+        valid_count = np.sum(valid_mask)
+        
+        if valid_count == 0:
+            return np.zeros((0, 3, 2)), np.array([], dtype=int), np.array([])
+        
+        # 提取有效数据
+        valid_phi = phi_flat[valid_mask]  # (N_valid,)
+        valid_combinations = combinations_repeated[valid_mask]  # (N_valid, 3, 2)
+        valid_indices = indice_repeated[valid_mask]  # (N_valid,)
+        
+        # 批量计算所有三角形的坐标
+        # valid_combinations形状: (N_valid, 3, 2) -> t和theta
+        t_values = valid_combinations[:, :, 0]  # (N_valid, 3) - t0, t1, t2
+        theta_values = valid_combinations[:, :, 1]  # (N_valid, 3) - theta0, theta1, theta2
+        
+        # 广播计算：phi + theta
+        # valid_phi[:, None]: (N_valid, 1)
+        # theta_values: (N_valid, 3)
+        phi_plus_theta = valid_phi[:, None] + theta_values  # (N_valid, 3)
+        
+        # 批量计算x和y坐标
+        x_coords = t_values * np.cos(phi_plus_theta)  # (N_valid, 3)
+        y_coords = t_values * np.sin(phi_plus_theta)  # (N_valid, 3)
+        
+        # 组合为 (N_valid, 3, 2) 的形式：[[x0,y0], [x1,y1], [x2,y2]]
+        colli_v = np.stack([x_coords, y_coords], axis=2)  # (N_valid, 3, 2)
         
         self._log_debug("第六层竖直完成", 
-                       f"生成{len(colli_v)}个有效碰撞三角形，原始形状: ({N_triangles}, 3)")
+                       f"生成{len(colli_v)}个有效碰撞三角形，形状: {colli_v.shape}")
         
-        return colli_v, colli_indice_v
+        return colli_v, valid_indices, valid_phi
     
     # ==================== 第七层：关键量计算 ====================
     def _compute_key_h(self, colli_h: np.ndarray) -> np.ndarray:
@@ -748,29 +752,32 @@ class Case3BatchSolver:
         第七层水平：计算水平情况的关键量
         
         Args:
-            colli_h: 水平碰撞结果 (N_valid_h, 3) - 每行为[x0, x1, x2]
+            colli_h: 水平碰撞结果 (N_valid_h, 3, 2) - 每行为[[x0,y0], [x1,y1], [x2,y2]]
             
         Returns:
-            key_h: 水平关键量 (N_valid_h, 2) - 每行为[key0, key1]
+            key_h: 水平关键量 (N_valid_h, 4) - 每行为[key0, key1, key2, key3]
         """
         self._log_debug("第七层水平: 计算关键量")
         
         if len(colli_h) == 0:
-            return np.zeros((0, 2))
+            return np.zeros((0, 4))
         
-        # 提取三个顶点的x坐标
-        x0 = colli_h[:, 0]  # (N_valid_h,)
-        x1 = colli_h[:, 1]  # (N_valid_h,)
-        x2 = colli_h[:, 2]  # (N_valid_h,)
+        # 提取三个顶点的坐标
+        x0 = colli_h[:, 0, 0]  # (N_valid_h,)
+        y0 = colli_h[:, 0, 1]  # (N_valid_h,)
+        x1 = colli_h[:, 1, 0]  # (N_valid_h,)
+        y1 = colli_h[:, 1, 1]  # (N_valid_h,)
+        x2 = colli_h[:, 2, 0]  # (N_valid_h,)
+        y2 = colli_h[:, 2, 1]  # (N_valid_h,)
         
-        # 水平模式的关键量
-        # key0 = x2 - x0
-        # key1 = x2 - x1
-        key0 = x2 - x0
-        key1 = x2 - x1
+        # 水平模式的四个关键量
+        key0 = x2 - x0  # 原来的key0
+        key1 = x2 - x1  # 原来的key1
+        key2 = y2 - y0  # 新增的key2
+        key3 = y2 - y1  # 新增的key3
         
-        # 组合成 (N_valid_h, 2) 的数组
-        key_h = np.column_stack([key0, key1])
+        # 组合成 (N_valid_h, 4) 的数组
+        key_h = np.column_stack([key0, key1, key2, key3])
         
         self._log_debug("第七层水平完成", 
                        f"生成key_h，形状: {key_h.shape}")
@@ -782,29 +789,32 @@ class Case3BatchSolver:
         第七层竖直：计算竖直情况的关键量
         
         Args:
-            colli_v: 竖直碰撞结果 (N_valid_v, 3) - 每行为[y0, y1, y2]
+            colli_v: 竖直碰撞结果 (N_valid_v, 3, 2) - 每行为[[x0,y0], [x1,y1], [x2,y2]]
             
         Returns:
-            key_v: 竖直关键量 (N_valid_v, 2) - 每行为[key0, key1]
+            key_v: 竖直关键量 (N_valid_v, 4) - 每行为[key0, key1, key2, key3]
         """
         self._log_debug("第七层竖直: 计算关键量")
         
         if len(colli_v) == 0:
-            return np.zeros((0, 2))
+            return np.zeros((0, 4))
         
-        # 提取三个顶点的y坐标
-        y0 = colli_v[:, 0]  # (N_valid_v,)
-        y1 = colli_v[:, 1]  # (N_valid_v,)
-        y2 = colli_v[:, 2]  # (N_valid_v,)
+        # 提取三个顶点的坐标
+        x0 = colli_v[:, 0, 0]  # (N_valid_v,)
+        y0 = colli_v[:, 0, 1]  # (N_valid_v,)
+        x1 = colli_v[:, 1, 0]  # (N_valid_v,)
+        y1 = colli_v[:, 1, 1]  # (N_valid_v,)
+        x2 = colli_v[:, 2, 0]  # (N_valid_v,)
+        y2 = colli_v[:, 2, 1]  # (N_valid_v,)
         
-        # 竖直模式的关键量
-        # key0 = y2 - y0
-        # key1 = y2 - y1
-        key0 = y2 - y0
-        key1 = y2 - y1
+        # 竖直模式的四个关键量
+        key0 = y2 - y0  # 原来的key0
+        key1 = y2 - y1  # 原来的key1
+        key2 = x2 - x0  # 新增的key2
+        key3 = x2 - x1  # 新增的key3
         
-        # 组合成 (N_valid_v, 2) 的数组
-        key_v = np.column_stack([key0, key1])
+        # 组合成 (N_valid_v, 4) 的数组
+        key_v = np.column_stack([key0, key1, key2, key3])
         
         self._log_debug("第七层竖直完成", 
                        f"生成key_v，形状: {key_v.shape}")
@@ -813,57 +823,233 @@ class Case3BatchSolver:
     
     # ==================== 第八层：求解 ====================
     def _solve_h(self, key_h: np.ndarray, colli_h: np.ndarray, 
-                colli_indice_h: np.ndarray) -> tuple:
+                colli_indice_h: np.ndarray, phi_h_flat: np.ndarray) -> tuple:
         """
         第八层水平：水平情况求解
         
         Args:
-            key_h: 水平关键量 (N_valid_h, 2)
-            colli_h: 水平碰撞结果 (N_valid_h, 3)
+            key_h: 水平关键量 (N_valid_h, 4) - [key0, key1, key2, key3]
+            colli_h: 水平碰撞结果 (N_valid_h, 3, 2)
             colli_indice_h: 对应的原始组合编号 (N_valid_h,)
+            phi_h_flat: 对应的phi值 (N_valid_h,)
             
         Returns:
             tuple: (sols_h, indice_sol_h)
-            - sols_h: 水平解 (N_sol_h, 3)
-            - indice_sol_h: 解对应的组合编号 (N_sol_h,)
+            - sols_h: 水平解数组 (N_valid_h, 5) - [x_min, x_max, y_min, y_max, phi]
+            - indice_sol_h: 解对应的组合编号 (N_valid_h,)
         """
-        # TODO: 实现水平求解
-        pass
+        self._log_debug("第八层水平: 开始批量求解")
+        
+        if len(key_h) == 0:
+            return np.zeros((0, 5)), np.array([], dtype=int)
+        
+        N_valid = len(key_h)
+        
+        # 初始化解数组，默认为无效解
+        sols_h = np.full((N_valid, 5), np.inf)
+        
+        # 批量计算所有可能的解中心
+        # 提取坐标
+        x2 = colli_h[:, 2, 0]  # (N_valid_h,)
+        y0 = colli_h[:, 0, 1]  # (N_valid_h,)
+        y2 = colli_h[:, 2, 1]  # (N_valid_h,)
+        
+        # 提取关键量
+        key0 = key_h[:, 0]  # x2 - x0
+        key1 = key_h[:, 1]  # x2 - x1
+        key2 = key_h[:, 2]  # y2 - y0
+        key3 = key_h[:, 3]  # y2 - y1
+        
+        # 条件1：前两个关键量同号检查
+        same_sign_01 = (key0 * key1) > 0
+        
+        # 条件2：后两个关键量绝对值最大值检查（筛掉不合理的）
+        max_abs_23 = np.maximum(np.abs(key2), np.abs(key3))
+        valid_range_23 = max_abs_23 < (self.n - self.tolerance)
+        
+        # 综合条件筛选
+        valid_mask = same_sign_01 & valid_range_23
+        valid_count = np.sum(valid_mask)
+        
+        if valid_count == 0:
+            self._log_debug("第八层水平完成", "无有效解")
+            return sols_h, colli_indice_h
+        
+        # 批量计算解中心
+        # 判断key0是正还是负，计算x_center
+        is_positive = key0 > 0
+        x_center = np.where(is_positive, self.m - x2, -x2)
+        
+        # 计算y_center
+        y_center = (self.n - y0 - y2) / 2
+        
+        # 批量计算解边界
+        x_min = x_center - self.tolerance
+        x_max = x_center + self.tolerance
+        y_min = y_center - self.tolerance
+        y_max = y_center + self.tolerance
+        
+        # 检查解的合理性（加入容错）
+        bounds_valid = ((x_min >= -self.tolerance) & (x_max <= self.m + self.tolerance) & 
+                       (y_min >= -self.tolerance) & (y_max <= self.n + self.tolerance))
+        
+        # 最终有效性：满足关键量条件且边界合理
+        final_valid = valid_mask & bounds_valid
+        
+        # 为有效解填充数据
+        sols_h[final_valid, 0] = x_min[final_valid]  # x_min
+        sols_h[final_valid, 1] = x_max[final_valid]  # x_max
+        sols_h[final_valid, 2] = y_min[final_valid]  # y_min
+        sols_h[final_valid, 3] = y_max[final_valid]  # y_max
+        sols_h[final_valid, 4] = phi_h_flat[final_valid]  # phi
+        
+        final_valid_count = np.sum(final_valid)
+        self._log_debug("第八层水平完成", 
+                       f"处理{N_valid}个候选解，其中{final_valid_count}个有效解")
+        
+        return sols_h, colli_indice_h
     
     def _solve_v(self, key_v: np.ndarray, colli_v: np.ndarray, 
-                colli_indice_v: np.ndarray) -> tuple:
+                colli_indice_v: np.ndarray, phi_v_flat: np.ndarray) -> tuple:
         """
         第八层竖直：竖直情况求解
         
         Args:
-            key_v: 竖直关键量 (N_valid_v, 2)
-            colli_v: 竖直碰撞结果 (N_valid_v, 3)
+            key_v: 竖直关键量 (N_valid_v, 4) - [key0, key1, key2, key3]
+            colli_v: 竖直碰撞结果 (N_valid_v, 3, 2)
             colli_indice_v: 对应的原始组合编号 (N_valid_v,)
+            phi_v_flat: 对应的phi值 (N_valid_v,)
             
         Returns:
             tuple: (sols_v, indice_sol_v)
-            - sols_v: 竖直解 (N_sol_v, 3)
-            - indice_sol_v: 解对应的组合编号 (N_sol_v,)
+            - sols_v: 竖直解数组 (N_valid_v, 5) - [x_min, x_max, y_min, y_max, phi]
+            - indice_sol_v: 解对应的组合编号 (N_valid_v,)
         """
-        # TODO: 实现竖直求解
-        pass
+        self._log_debug("第八层竖直: 开始批量求解")
+        
+        if len(key_v) == 0:
+            return np.zeros((0, 5)), np.array([], dtype=int)
+        
+        N_valid = len(key_v)
+        
+        # 初始化解数组，默认为无效解
+        sols_v = np.full((N_valid, 5), np.inf)
+        
+        # 批量计算所有可能的解中心
+        # 提取坐标
+        x0 = colli_v[:, 0, 0]  # (N_valid_v,)
+        x2 = colli_v[:, 2, 0]  # (N_valid_v,)
+        y2 = colli_v[:, 2, 1]  # (N_valid_v,)
+        
+        # 提取关键量
+        key0 = key_v[:, 0]  # y2 - y0
+        key1 = key_v[:, 1]  # y2 - y1
+        key2 = key_v[:, 2]  # x2 - x0
+        key3 = key_v[:, 3]  # x2 - x1
+        
+        # 条件1：前两个关键量同号检查
+        same_sign_01 = (key0 * key1) > 0
+        
+        # 条件2：后两个关键量绝对值最大值检查（筛掉不合理的）
+        max_abs_23 = np.maximum(np.abs(key2), np.abs(key3))
+        valid_range_23 = max_abs_23 < (self.m - self.tolerance)
+        
+        # 综合条件筛选
+        valid_mask = same_sign_01 & valid_range_23
+        valid_count = np.sum(valid_mask)
+        
+        if valid_count == 0:
+            self._log_debug("第八层竖直完成", "无有效解")
+            return sols_v, colli_indice_v
+        
+        # 批量计算解中心
+        # 判断key0是正还是负，计算y_center
+        is_positive = key0 > 0
+        y_center = np.where(is_positive, self.n - y2, -y2)
+        
+        # 计算x_center
+        x_center = (self.m - x0 - x2) / 2
+        
+        # 批量计算解边界
+        x_min = x_center - self.tolerance
+        x_max = x_center + self.tolerance
+        y_min = y_center - self.tolerance
+        y_max = y_center + self.tolerance
+        
+        # 检查解的合理性（加入容错）
+        bounds_valid = ((x_min >= -self.tolerance) & (x_max <= self.m + self.tolerance) & 
+                       (y_min >= -self.tolerance) & (y_max <= self.n + self.tolerance))
+        
+        # 最终有效性：满足关键量条件且边界合理
+        final_valid = valid_mask & bounds_valid
+        
+        # 为有效解填充数据
+        sols_v[final_valid, 0] = x_min[final_valid]  # x_min
+        sols_v[final_valid, 1] = x_max[final_valid]  # x_max
+        sols_v[final_valid, 2] = y_min[final_valid]  # y_min
+        sols_v[final_valid, 3] = y_max[final_valid]  # y_max
+        sols_v[final_valid, 4] = phi_v_flat[final_valid]  # phi
+        
+        final_valid_count = np.sum(final_valid)
+        self._log_debug("第八层竖直完成", 
+                       f"处理{N_valid}个候选解，其中{final_valid_count}个有效解")
+        
+        return sols_v, colli_indice_v
     
     # ==================== 第九层：解组织 ====================
-    def _organize_solutions(self, sols: List, indice_sol: List, 
+    def _organize_solutions(self, all_sols: np.ndarray, all_indice: np.ndarray, 
                           N_cbn: int) -> List[Tuple]:
         """
         第九层：组织最终解
         
         Args:
-            sols: 所有解 (列表)
-            indice_sol: 解对应的组合编号 (列表)
+            all_sols: 所有解数组 (N_total, 5) - [x_min, x_max, y_min, y_max, phi]
+            all_indice: 解对应的组合编号数组 (N_total,)
             N_cbn: 原始组合数量
             
         Returns:
-            List[Tuple]: 组织好的解列表
+            List[Tuple]: 组织好的解列表，每个解为((x_min, x_max), (y_min, y_max), phi)
         """
-        # TODO: 实现解组织
-        pass
+        self._log_debug("第九层: 开始组织解")
+        
+        if len(all_sols) == 0:
+            self._log_debug("第九层完成", "无解需要组织")
+            return []
+        
+        # 初始化按组合分组的解列表
+        organized_solutions = [[] for _ in range(N_cbn)]
+        
+        # 筛选有效解（不包含np.inf的解）
+        valid_mask = np.isfinite(all_sols[:, 0])  # 检查x_min是否有限
+        
+        if not np.any(valid_mask):
+            self._log_debug("第九层完成", "所有解都无效")
+            return []
+        
+        # 提取有效解和对应的组合编号
+        valid_sols = all_sols[valid_mask]
+        valid_indices = all_indice[valid_mask]
+        
+        # 遍历所有有效解，按组合编号分组
+        for i in range(len(valid_sols)):
+            sol = valid_sols[i]
+            cbn_idx = valid_indices[i]
+            
+            x_min, x_max, y_min, y_max, phi = sol
+            
+            # 组织为标准格式：((x_min, x_max), (y_min, y_max), phi)
+            organized_sol = ((x_min, x_max), (y_min, y_max), phi)
+            organized_solutions[cbn_idx].append(organized_sol)
+        
+        # 统计每个组合的解数量
+        sol_counts = [len(sols) for sols in organized_solutions]
+        total_valid_solutions = sum(sol_counts)
+        non_empty_groups = sum(1 for count in sol_counts if count > 0)
+        
+        self._log_debug("第九层完成", 
+                       f"组织了{total_valid_solutions}个有效解，分布在{non_empty_groups}/{N_cbn}个组合中")
+                
+        return organized_solutions
     
     def get_solver_info(self) -> dict:
         """获取求解器信息"""
