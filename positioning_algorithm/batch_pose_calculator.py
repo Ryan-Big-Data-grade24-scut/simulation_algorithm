@@ -66,13 +66,25 @@ class PoseSolver:
     
     def _setup_logging(self):
         """设置日志系统"""
-        self.logger = logging.getLogger(__name__)
-        if not self.logger.handlers:
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
-            self.logger.setLevel(logging.INFO)
+        import os
+        
+        # 创建logs目录
+        os.makedirs('logs', exist_ok=True)
+        
+        self.logger = logging.getLogger("PoseSolverFilter")
+        
+        # 清理已有的handlers，避免重复添加
+        for handler in self.logger.handlers[:]:
+            if isinstance(handler, logging.FileHandler):
+                handler.close()
+                self.logger.removeHandler(handler)
+        
+        # 添加文件日志器
+        handler = logging.FileHandler("logs/pose_solver_filter.log", encoding="utf-8")
+        formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+        self.logger.setLevel(logging.DEBUG)  # 设置为DEBUG级别以显示详细数组日志
     
     def _precompute_laser_params(self) -> np.ndarray:
         """预计算激光参数（初始化时计算一次）"""
@@ -112,25 +124,34 @@ class PoseSolver:
         
         # 4. 创建可扩展的解列表，预分配空间（N_cbn组合的解）
         N_cbn = len(combinations)
-        solutions = [[] for _ in range(N_cbn)]  # 最终解列表，每个解为 (x, y, phi)
-        case1_solutions = [[] for _ in range(N_cbn)]  # Case1求解器的解
-        case3_solutions = [[] for _ in range(N_cbn)]  # Case3求解器的解
-        # 5. 使用Case1求解器求解
-        #case1_solutions = self.case1_solver.solve(combinations)  # 返回 (N_cbn, 5) 格式
-        case3_solutions = self.case3_solver.solve(combinations)
-        #"""
-        # 6. 按照对应的cbn编号，处理case1_solutions并extend solutions列表
-        for cbn_idx in range(N_cbn):
-            # 获取当前组合的解
-            solutions[cbn_idx].extend(case1_solutions[cbn_idx])
-            solutions[cbn_idx].extend(case3_solutions[cbn_idx])
-        #"""
-        # 7. 未来将启用其他case求解器
-        # case2_solutions = self.case2_solver.solve(combinations)  
+        solutions = np.full((N_cbn, 36, 5), np.inf, dtype=np.float64)  # 36个解，每个解5个参数
+        self.logger.debug(f"预分配解空间: {solutions.shape}")
+        valid_solutions = np.zeros((N_cbn, 36), dtype=bool)  # 有效性标志
+        final_sol_1 = np.full((N_cbn, 12, 5), np.inf, dtype=np.float64)
+        valid_1 = np.zeros((N_cbn, 12), dtype=bool)  # 有效性标志
+        final_sol_3 = np.full((N_cbn, 24, 5), np.inf, dtype=np.float64)
+        valid_3 = np.zeros((N_cbn, 24), dtype=bool)  # 有效性标志
+        # 5. 使用Case1和case3求解器求解
+        final_sol_1, valid_1 = self.case1_solver.solve(combinations)  # 返回 (N_cbn, 5) 格式
+        #final_sol_3, valid_3 = self.case3_solver.solve(combinations)  # 返回 (N_cbn, 5) 格式
+       
+        # 每12个case1 和 每18个case3解 把他们合并进 solutions
+        solutions[:,:12,:] = final_sol_1
+        valid_solutions[:,:12] = valid_1
+        solutions[:,12:,:] = final_sol_3
+        valid_solutions[:,12:] = valid_3
+
+        # 6. 调用筛选器
+        filtered_solutions = self.filter_solutions(solutions, valid_solutions)
+            
+        # 7. 把解转换为原接口格式
+        results = []
+
+        for sol in filtered_solutions:
+            x_min, x_max, y_min, y_max, phi = sol[:5]
+            results.append(((x_min, x_max), (y_min, y_max), phi))
         
-        solutions = [sol for sublist in solutions for sol in sublist]  # 扁平化解列表
-        self.logger.info(f"求解完成，共找到 {len(solutions)} 个解, 第一个解为 {solutions[0]}")
-        return solutions
+        return results
     
     def _calculate_collision_vectors(self, distances: np.ndarray) -> np.ndarray:
         """计算碰撞向量参数"""
@@ -181,6 +202,231 @@ class PoseSolver:
         self.logger.debug("预计算三角函数（委托给全局缓存）")
         self.trig_cache.update_combinations(combinations)
         return self.trig_cache.get_cache_info()
+
+    # 筛选器：处理解的相容性融合
+    def filter_solutions(self, solutions: np.ndarray, valid_mask: np.ndarray) -> List[Tuple]:
+        """
+        筛选和融合相容的解
+        
+        Args:
+            solutions: 解数组 (N, 36, 5) - 每个解格式为[xmin, xmax, ymin, ymax, phi]
+            valid_mask: 有效性掩码 (N, 36)
+
+        Returns:
+            筛选后的解列表
+        """
+        self.logger.info(f"开始筛选解: 输入形状{solutions.shape}, 有效掩码形状{valid_mask.shape}")
+        
+        N = solutions.shape[0]
+        tolerance = self.config.tolerance
+        
+        # 预定义筛选结果存储空间：最多36*N个解，每个解6个参数[xmin, xmax, ymin, ymax, phi, compatible_count]
+        filtered_solutions = np.full((36*N, 6), np.inf, dtype=np.float64)
+        filtered_count = 0  # 当前已筛选解的数量
+        
+        # 逐个处理每个组合
+        for i in range(N):
+            self.logger.info(f"=" * 80)
+            self.logger.info(f"处理第{i}个组合")
+            self.logger.info(f"=" * 80)
+            
+            # 获取第i个组合中的有效解
+            current_valid = valid_mask[i]
+            current_solutions = solutions[i]
+            
+            if not np.any(current_valid):
+                self.logger.info(f"第{i}个组合没有有效解，跳过")
+                continue  # 跳过没有有效解的组合
+            
+            # 输出当前组合的有效解信息
+            valid_count = np.sum(current_valid)
+            self.logger.info(f"第{i}个组合有{valid_count}个有效解")
+            self._log_array_detailed(f"current_valid", current_valid)
+            self._log_array_detailed(f"current_solutions", current_solutions)
+            
+            # 提取有效解的索引和数据
+            valid_indices = np.where(current_valid)[0]
+            valid_solutions = current_solutions[valid_indices]  # (n_valid, 5)
+            remaining_mask = current_valid.copy()  # 剩余解的掩码
+            
+            self.logger.info(f"开始与已有{filtered_count}个筛选解进行相容性检查")
+            
+            # 与已有筛选解进行相容性检查
+            for j in range(filtered_count):
+                self.logger.info(f"-" * 60)
+                self.logger.info(f"检查与第{j}个已有解的相容性")
+                
+                existing_sol = filtered_solutions[j]  # 已有解
+                self.logger.info(f"已有解 filtered_solutions[{j}]: {existing_sol}")
+                
+                # 批量计算相容性关键量
+                # 计算交集边界
+                key0 = np.minimum(current_solutions[:, 1], existing_sol[1])  # min(xmax1, xmax2)
+                key1 = np.maximum(current_solutions[:, 0], existing_sol[0])  # max(xmin1, xmin2)
+                key2 = np.minimum(current_solutions[:, 3], existing_sol[3])  # min(ymax1, ymax2)  
+                key3 = np.maximum(current_solutions[:, 2], existing_sol[2])  # max(ymin1, ymin2)
+                key4 = current_solutions[:, 4]  # phi1
+                # phi2只有一个，但为了方便批处理，我们要把它弄成一个数组
+                key5 = np.full(current_solutions.shape[0], existing_sol[4])  # phi2
+                
+                # 结构化输出关键量
+                self.logger.info(f"计算得到的关键量:")
+                self._log_array_detailed(f"key0 (min_xmax)", key0)
+                self._log_array_detailed(f"key1 (max_xmin)", key1)
+                self._log_array_detailed(f"key2 (min_ymax)", key2)
+                self._log_array_detailed(f"key3 (max_ymin)", key3)
+                self._log_array_detailed(f"key4 (phi1)", key4)
+                self._log_array_detailed(f"key5 (phi2)", key5)
+                
+                # 计算相容性掩码
+                compatible_mask = (
+                    (key0 >= key1) &  # x方向有交集
+                    (key2 >= key3) &  # y方向有交集
+                    (np.abs(key4 - key5) <= tolerance)  # phi差值在容差内
+                )
+                
+                self._log_array_detailed(f"compatible_mask", compatible_mask)
+                
+                compatible_count = np.sum(compatible_mask)
+                self.logger.info(f"找到{compatible_count}个相容解")
+                
+                if compatible_count > 0:
+                    # 找到相容解，进行融合
+                    compatible_indices = np.where(compatible_mask)[0]
+                    self.logger.info(f"相容解索引: {compatible_indices}")
+                    
+                    new_sol = np.zeros((compatible_count, 6), dtype=np.float64)
+                    new_sol[:, 0] = key1[compatible_indices]  # 修正：应该是key1(max_xmin)
+                    new_sol[:, 1] = key0[compatible_indices]  # 修正：应该是key0(min_xmax)
+                    new_sol[:, 2] = key3[compatible_indices]  # 修正：应该是key3(max_ymin)
+                    new_sol[:, 3] = key2[compatible_indices]  # 修正：应该是key2(min_ymax)
+                    new_sol[:, 4] = (key4[compatible_indices] + key5[compatible_indices]) / 2  # 平均phi
+                    new_sol[:, 5] = existing_sol[5] + 1  # 相容数量+1
+                    
+                    # 结构化输出融合后的解
+                    self.logger.info(f"融合后的新解:")
+                    self._log_array_detailed(f"new_sol", new_sol)
+                    
+                    # 原来的j被替换为了现在的new_sol 也就是说从一个变成了多个
+                    # 我们把它插入在j到j+compatible_count之间
+                    temp = filtered_solutions[j+1:filtered_count].copy()  # 保存后面的解
+                    self.logger.info(f"保存后续解，数量: {len(temp)}")
+                    
+                    filtered_solutions[j:j+compatible_count] = new_sol
+                    filtered_count += compatible_count - 1
+                    filtered_solutions[j+compatible_count:filtered_count] = temp
+                    
+                    self.logger.info(f"更新后filtered_count: {filtered_count}")
+
+                    # 更新剩余解掩码
+                    remaining_mask[compatible_indices] = False
+                    self.logger.info(f"更新剩余解掩码，剩余{np.sum(remaining_mask)}个解")
+                else:
+                    self.logger.info(f"与第{j}个解没有相容性")
+
+            self.logger.info(f"-" * 60)
+            self.logger.info(f"完成第{i}个组合与所有已有解的相容性检查")
+            
+            # 将剩余的未相容解添加到筛选结果中
+            if np.any(remaining_mask):
+                remaining_count = np.sum(remaining_mask)
+                self.logger.info(f"添加{remaining_count}个未相容的独立解")
+                
+                # 添加到筛选结果中
+                filtered_solutions[filtered_count:filtered_count + remaining_count, :5] = current_solutions[remaining_mask, :5]
+                filtered_solutions[filtered_count:filtered_count + remaining_count, 5] = 1
+                filtered_count += remaining_count
+                
+                self.logger.info(f"添加独立解后，总筛选解数量: {filtered_count}")
+            else:
+                self.logger.info(f"第{i}个组合的所有解都已融合，无独立解")
+            
+            # 输出处理完第i个组合后的完整筛选结果
+            self.logger.info(f"处理完第{i}个组合后的筛选结果:")
+            current_filtered = filtered_solutions[:filtered_count]
+            self._log_array_detailed(f"filtered_solutions[:{filtered_count}]", current_filtered)
+        
+        # 提取有效的筛选结果
+        final_filtered = filtered_solutions[:filtered_count]
+        if final_filtered.size == 0:
+            self.logger.warning("没有有效的筛选结果")
+            return []
+        
+        self.logger.info(f"=" * 80)
+        self.logger.info(f"开始最终排序和筛选")
+        self.logger.info(f"=" * 80)
+        
+        # 我们根据相容组合数量进行排序，方向为降序
+        sort_indices = np.argsort(final_filtered[:, 5])[::-1]
+        final_filtered = final_filtered[sort_indices]
+        
+        self.logger.info(f"排序后的最终筛选结果:")
+        self._log_array_detailed(f"final_filtered (sorted)", final_filtered)
+
+        # 如果最高相容组合数等于组合数N 则返回相容组合数等于N的解
+        max_compatible_count = final_filtered[0, 5]
+        self.logger.info(f"最高相容组合数: {max_compatible_count}, 总组合数: {N}")
+        
+        if max_compatible_count == N:
+            perfect_solutions = final_filtered[final_filtered[:, 5] == N, :5]
+            self.logger.info(f"找到{len(perfect_solutions)}个完美相容解 (相容数=N)")
+            self._log_array_detailed(f"perfect_solutions", perfect_solutions)
+            return perfect_solutions
+
+        # 否则返回前5个解
+        top_solutions = final_filtered[:5, :5]
+        self.logger.info(f"返回前5个最佳解:")
+        self._log_array_detailed(f"top_solutions", top_solutions)
+        return top_solutions
+    
+    def _log_array_detailed(self, name: str, arr):
+        """详细结构化输出数组的每个元素 - 使用文件日志"""
+        if isinstance(arr, list):
+            if len(arr) == 0:
+                self.logger.debug(f"{name}: 空列表")
+                return
+            
+            self.logger.debug(f"{name} 详细内容: 列表长度: {len(arr)}")
+            for i, item in enumerate(arr):
+                self.logger.debug(f"{name}[{i}]: {item}")
+        
+        elif isinstance(arr, np.ndarray):
+            if arr.size == 0:
+                self.logger.debug(f"{name}: 空数组")
+                return
+            
+            self.logger.debug(f"{name} 详细内容: 形状: {arr.shape}, 类型: {arr.dtype.name}")
+            
+            if arr.ndim == 1:
+                # 一维数组：逐个显示
+                for i in range(len(arr)):
+                    self.logger.debug(f"{name}[{i}]: {arr[i]}")
+            
+            elif arr.ndim == 2:
+                # 二维数组：按行显示
+                for i in range(arr.shape[0]):
+                    self.logger.debug(f"{name}[{i}]: {arr[i]}")
+            
+            elif arr.ndim == 3:
+                # 三维数组：分层显示
+                for i in range(arr.shape[0]):
+                    self.logger.debug(f"{name}[{i}] 形状{arr[i].shape}:")
+                    for j in range(arr.shape[1]):
+                        self.logger.debug(f"  {name}[{i}][{j}]: {arr[i][j]}")
+            
+            else:
+                # 更高维数组：显示基本信息和前几个元素
+                self.logger.debug(f"{name}: 高维数组 {arr.shape}，显示前5个元素:")
+                flat_arr = arr.flatten()
+                for i in range(min(5, len(flat_arr))):
+                    self.logger.debug(f"{name}.flat[{i}]: {flat_arr[i]}")
+        
+        else:
+            self.logger.debug(f"{name}: 类型: {type(arr)}, 内容: {arr}")
+
+    def _log_array_structured(self, name: str, arr):
+        """结构化输出数组内容 - 保持向后兼容的别名"""
+        self._log_array_detailed(name, arr)
 
 # 保持向后兼容的别名
 BatchPoseCalculator = PoseSolver
