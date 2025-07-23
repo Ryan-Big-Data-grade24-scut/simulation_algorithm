@@ -248,75 +248,75 @@ class Case3BatchSolver:
         Returns:
             List[Tuple]: 解列表，每个解为 ((x_min, x_max), (y_min, y_max), phi)
         """
-        self._log_info("=" * 60)
-        self._log_info("开始Case3批处理求解 - 规则化数据流程")
-        self._log_info("=" * 60)
+        # self._log_info("=" * 60)
+        # self._log_info("开始Case3批处理求解 - 规则化数据流程")
+        # self._log_info("=" * 60)
         
         # 输入验证和日志
         if len(combinations) == 0:
-            self._log_warning("没有组合可求解")
+            # self._log_warning("没有组合可求解")
             return []
         
         N = len(combinations)
-        self._log_info(f"数据流程开始", f"输入{N}个组合 -> 目标24N={24*N}个最终候选解")
+        # self._log_info(f"数据流程开始", f"输入{N}个组合 -> 目标24N={24*N}个最终候选解")
         
         # 输入数据详细日志
-        self._log_debug("=== 输入数据详细分析 ===")
-        self._log_array_detailed("输入combinations", combinations)
+        # self._log_debug("=== 输入数据详细分析 ===")
+        # self._log_array_detailed("输入combinations", combinations)
         
         # 第一层：扩展组合 N -> 6N
-        self._log_debug("第一层: 组合扩展 N->6N")
+        # self._log_debug("第一层: 组合扩展 N->6N")
         expanded_combinations = self._expand_combinations(combinations)  # (6N, 3, 2)
         
         # 第一层数据详细日志
-        self._log_debug("=== 第一层输出详细分析 ===")
-        self._log_array_detailed("expanded_combinations", expanded_combinations)
+        # self._log_debug("=== 第一层输出详细分析 ===")
+        # self._log_array_detailed("expanded_combinations", expanded_combinations)
         
         # 第二-五层：计算phi 6N -> 6N
-        self._log_debug("第二-五层: 计算phi 6N->6N")
+        # self._log_debug("第二-五层: 计算phi 6N->6N")
         phi_h, phi_v, valid_phi_h, valid_phi_v = self._compute_phi_regularized(expanded_combinations)  # (6N, 2), (6N,)
         
         # 第二-五层数据详细日志
-        self._log_debug("=== 第二-五层输出详细分析 ===")
-        self._log_array_detailed("phi_h", phi_h)
-        self._log_array_detailed("phi_v", phi_v) 
-        self._log_array_detailed("valid_phi_h", valid_phi_h)
-        self._log_array_detailed("valid_phi_v", valid_phi_v)
+        # self._log_debug("=== 第二-五层输出详细分析 ===")
+        # self._log_array_detailed("phi_h", phi_h)
+        # self._log_array_detailed("phi_v", phi_v) 
+        # self._log_array_detailed("valid_phi_h", valid_phi_h)
+        # self._log_array_detailed("valid_phi_v", valid_phi_v)
         
         # 第六-七层：计算碰撞和关键量 6N -> 12N
-        self._log_debug("第六-七层: 计算碰撞和关键量 6N->12N")
+        # self._log_debug("第六-七层: 计算碰撞和关键量 6N->12N")
         colli_h, key_h, valid_phi_flat_h = self._compute_collision_and_key_h(phi_h, expanded_combinations, valid_phi_h)  # (12N, 3, 2), (12N, 4), (12N,)
         colli_v, key_v, valid_phi_flat_v = self._compute_collision_and_key_v(phi_v, expanded_combinations, valid_phi_v)  # (12N, 3, 2), (12N, 4), (12N,)
         
         # 第六-七层数据详细日志
-        self._log_debug("=== 第六-七层输出详细分析 ===")
-        self._log_array_detailed("colli_h", colli_h)
-        self._log_array_detailed("key_h", key_h)
-        self._log_array_detailed("valid_phi_flat_h", valid_phi_flat_h)
-        self._log_array_detailed("colli_v", colli_v)
-        self._log_array_detailed("key_v", key_v)
-        self._log_array_detailed("valid_phi_flat_v", valid_phi_flat_v)
+        # self._log_debug("=== 第六-七层输出详细分析 ===")
+        # self._log_array_detailed("colli_h", colli_h)
+        # self._log_array_detailed("key_h", key_h)
+        # self._log_array_detailed("valid_phi_flat_h", valid_phi_flat_h)
+        # self._log_array_detailed("colli_v", colli_v)
+        # self._log_array_detailed("key_v", key_v)
+        # self._log_array_detailed("valid_phi_flat_v", valid_phi_flat_v)
         
         # 第八层：求解 12N -> 12N
-        self._log_debug("第八层: 求解 12N->12N")
+        # self._log_debug("第八层: 求解 12N->12N")
         sols_h, valid_sol_h = self._solve_regularized_h(key_h, colli_h, phi_h, valid_phi_flat_h)  # (12N, 5), (12N,)
         sols_v, valid_sol_v = self._solve_regularized_v(key_v, colli_v, phi_v, valid_phi_flat_v)  # (12N, 5), (12N,)
         
         # 第八层数据详细日志
-        self._log_debug("=== 第八层输出详细分析 ===")
-        self._log_array_detailed("sols_h", sols_h)
-        self._log_array_detailed("valid_sol_h", valid_sol_h)
-        self._log_array_detailed("sols_v", sols_v)
-        self._log_array_detailed("valid_sol_v", valid_sol_v)
+        # self._log_debug("=== 第八层输出详细分析 ===")
+        # self._log_array_detailed("sols_h", sols_h)
+        # self._log_array_detailed("valid_sol_h", valid_sol_h)
+        # self._log_array_detailed("sols_v", sols_v)
+        # self._log_array_detailed("valid_sol_v", valid_sol_v)
         
         # 第九层：合并解 12N+12N -> 24N
-        self._log_debug("第九层: 合并解 12N+12N->24N")
+        # self._log_debug("第九层: 合并解 12N+12N->24N")
         final_sols, final_valid = self._merge_solutions_regularized(sols_h, sols_v, valid_sol_h, valid_sol_v, N)  # (24N, 5), (24N,)
         
         # 第九层数据详细日志
-        self._log_debug("=== 第九层最终输出详细分析 ===")
-        self._log_array_detailed("final_sols", final_sols)
-        self._log_array_detailed("final_valid", final_valid)
+        # self._log_debug("=== 第九层最终输出详细分析 ===")
+        # self._log_array_detailed("final_sols", final_sols)
+        # self._log_array_detailed("final_valid", final_valid)
         
         return final_sols, final_valid
     
@@ -341,7 +341,7 @@ class Case3BatchSolver:
         - 排列5: [6*i+5] = (2,1,0)
         """
         N = len(combinations)
-        self._log_debug(f"第一层扩展组合", f"输入{N}个组合，将扩展为{6*N}个")
+        # self._log_debug(f"第一层扩展组合", f"输入{N}个组合，将扩展为{6*N}个")
         
         # 初始化扩展后的数组
         expanded_combinations = np.zeros((6*N, 3, 2))
@@ -362,8 +362,8 @@ class Case3BatchSolver:
                 expanded_idx = i * 6 + perm_idx
                 expanded_combinations[expanded_idx] = combinations[i][perm]
         
-        self._log_debug("第一层扩展完成", 
-                       f"生成{len(expanded_combinations)}个扩展组合，形状: {expanded_combinations.shape}")
+        # self._log_debug("第一层扩展完成", 
+        #                f"生成{len(expanded_combinations)}个扩展组合，形状: {expanded_combinations.shape}")
         
         return expanded_combinations
     
@@ -382,7 +382,7 @@ class Case3BatchSolver:
             - valid_phi_h: 水平phi有效掩码 (6N,)
             - valid_phi_v: 竖直phi有效掩码 (6N,)
         """
-        self._log_debug("第二-五层合并: 计算phi")
+        # self._log_debug("第二-五层合并: 计算phi")
         
         N_exp = len(expanded_combinations)  # 6N
         
@@ -443,8 +443,8 @@ class Case3BatchSolver:
         # 统计
         valid_h_count = np.sum(valid_phi_h)
         valid_v_count = np.sum(valid_phi_v)
-        self._log_debug("第二-五层完成", 
-                       f"phi_h有效: {valid_h_count}/{N_exp}, phi_v有效: {valid_v_count}/{N_exp}")
+        # self._log_debug("第二-五层完成", 
+        #                f"phi_h有效: {valid_h_count}/{N_exp}, phi_v有效: {valid_v_count}/{N_exp}")
         return phi_h, phi_v, valid_phi_h, valid_phi_v
         
     # ==================== 第六-七层：碰撞和关键量 6N->12N ====================
@@ -464,7 +464,7 @@ class Case3BatchSolver:
             - key_h: 关键量 (12N, 4)
             - valid_phi_flat_h: 扁平化phi有效掩码 (12N,)
         """
-        self._log_debug("第六-七层水平: 计算碰撞和关键量")
+        # self._log_debug("第六-七层水平: 计算碰撞和关键量")
         
         N_exp = len(phi_h)  # 6N
         N_flat = 2 * N_exp  # 12N
@@ -519,8 +519,8 @@ class Case3BatchSolver:
             key_h[valid_mask] = valid_key
         
         valid_count = np.sum(valid_phi_flat_h)
-        self._log_debug("第六-七层水平完成", 
-                       f"生成{N_flat}个位置，有效{valid_count}个")
+        # self._log_debug("第六-七层水平完成", 
+        #                f"生成{N_flat}个位置，有效{valid_count}个")
         
         return colli_h, key_h, valid_phi_flat_h
     
@@ -540,7 +540,7 @@ class Case3BatchSolver:
             - key_v: 关键量 (12N, 4)
             - valid_phi_flat_v: 扁平化phi有效掩码 (12N,)
         """
-        self._log_debug("第六-七层竖直: 计算碰撞和关键量")
+        # self._log_debug("第六-七层竖直: 计算碰撞和关键量")
         
         N_exp = len(phi_v)  # 6N
         N_flat = 2 * N_exp  # 12N

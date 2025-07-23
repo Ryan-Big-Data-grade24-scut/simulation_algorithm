@@ -205,77 +205,77 @@ class Case1BatchSolver:
             np.ndarray: 解数组 (N, 5) - 每行为[xmin, xmax, ymin, ymax, phi]
                        无解的组合用np.inf填充
         """
-        self._log_info("=" * 60)
-        self._log_info("开始Case1批处理求解（规则化版本）")
-        self._log_info("=" * 60)
+        # self._log_info("=" * 60)
+        # self._log_info("开始Case1批处理求解（规则化版本）")
+        # self._log_info("=" * 60)
         
         # 输入验证和日志
-        self._log_array("输入组合数组", combinations, show_content=False)
-        self._log_array_detailed("输入组合详细", combinations)
+        # self._log_array("输入组合数组", combinations, show_content=False)
+        # self._log_array_detailed("输入组合详细", combinations)
         
         if len(combinations) == 0:
-            self._log_warning("没有组合可求解")
+            # self._log_warning("没有组合可求解")
             return np.array([]).reshape(0, 5)
         
         N = len(combinations)
-        self._log_info(f"组合数量统计", f"总共{N}个激光组合需要处理")
+        # self._log_info(f"组合数量统计", f"总共{N}个激光组合需要处理")
         
         # 第一层: 扩展组合 (N -> 3N)
-        self._log_debug("第一层: 开始组合扩展 N -> 3N")
+        # self._log_debug("第一层: 开始组合扩展 N -> 3N")
         expanded, indices = self._expand_combinations(combinations)
-        self._log_array_detailed("扩展后组合详细", expanded)
-        self._log_array_detailed("组合索引追踪详细", indices)
+        # self._log_array_detailed("扩展后组合详细", expanded)
+        # self._log_array_detailed("组合索引追踪详细", indices)
         
         # 第二层: 计算phi
         # 步骤1：计算A/B系数
-        self._log_debug("第二层步骤1: 计算A、B系数")
+        # self._log_debug("第二层步骤1: 计算A、B系数")
         ab_h, ab_v = self._compute_ab_coefficients(expanded)
-        self._log_array_detailed("水平边A、B系数详细", ab_h)
-        self._log_array_detailed("竖直边A、B系数详细", ab_v)
+        # self._log_array_detailed("水平边A、B系数详细", ab_h)
+        # self._log_array_detailed("竖直边A、B系数详细", ab_v)
         
         # 步骤2: 计算phi候选 (6N,)
-        self._log_debug("第二层步骤2: 计算phi候选")
+        # self._log_debug("第二层步骤2: 计算phi候选")
         phi_h, valid_h = self._compute_phi_candidates_regularized(ab_h)
         phi_v, valid_v = self._compute_phi_candidates_regularized(ab_v)
         
-        self._log_array_detailed("水平边phi候选详细", phi_h)
-        self._log_array_detailed("水平边有效掩码详细", valid_h)
-        self._log_array_detailed("竖直边phi候选详细", phi_v)
-        self._log_array_detailed("竖直边有效掩码详细", valid_v)
+        # self._log_array_detailed("水平边phi候选详细", phi_h)
+        # self._log_array_detailed("水平边有效掩码详细", valid_h)
+        # self._log_array_detailed("竖直边phi候选详细", phi_v)
+        # self._log_array_detailed("竖直边有效掩码详细", valid_v)
         
         valid_count_h = np.sum(valid_h)
         valid_count_v = np.sum(valid_v)
-        self._log_info("phi候选统计", f"水平边: {valid_count_h}/{6*N}个有效, 竖直边: {valid_count_v}/{6*N}个有效")
+        # self._log_info("phi候选统计", f"水平边: {valid_count_h}/{6*N}个有效, 竖直边: {valid_count_v}/{6*N}个有效")
         
         # 第三层: 计算碰撞三角形和关键量
-        self._log_debug("第三层: 计算碰撞三角形和关键量")
+        # self._log_debug("第三层: 计算碰撞三角形和关键量")
         colli_h, key_h = self._compute_collision_and_key_regularized(phi_h, valid_h, expanded, "horizontal")
         colli_v, key_v = self._compute_collision_and_key_regularized(phi_v, valid_v, expanded, "vertical")
         
-        self._log_array_detailed("水平边碰撞三角形详细", colli_h)
-        self._log_array_detailed("水平边关键量详细", key_h)
-        self._log_array_detailed("竖直边碰撞三角形详细", colli_v)
-        self._log_array_detailed("竖直边关键量详细", key_v)
+        # self._log_array_detailed("水平边碰撞三角形详细", colli_h)
+        # self._log_array_detailed("水平边关键量详细", key_h)
+        # self._log_array_detailed("竖直边碰撞三角形详细", colli_v)
+        # self._log_array_detailed("竖直边关键量详细", key_v)
         
         # 第四层: 批量求解
-        self._log_debug("第四层: 批量求解")
+        # self._log_debug("第四层: 批量求解")
         sol_h = self._solve_batch_regularized(colli_h, key_h, phi_h, valid_h, "horizontal")
         sol_v = self._solve_batch_regularized(colli_v, key_v, phi_v, valid_v, "vertical")
         
-        self._log_array_detailed("水平边解详细", sol_h)
-        self._log_array_detailed("竖直边解详细", sol_v)
+        # self._log_array_detailed("水平边解详细", sol_h)
+        # self._log_array_detailed("竖直边解详细", sol_v)
         
         # 第五层：合并结果(12N, 5) -> (N, 12, 5)
-        self._log_debug("第五层: 合并结果")
+        # self._log_debug("第五层: 合并结果")
         final_sol, final_valid = self._merge_solutions_regularized(sol_h, sol_v, valid_h, valid_v, indices, N)
         
-        self._log_array_detailed("最终解详细", final_sol)
+        # self._log_array_detailed("最终解详细", final_sol)
         
         # 最终统计
         valid_solutions = np.sum(~np.isinf(final_sol[:, 0]))
-        self._log_info("=" * 60)
-        self._log_info("Case1求解完成", f"在{N}个组合中找到{valid_solutions}个有效解")
-        self._log_info("=" * 60)
+        # self._log_info("=" * 60)
+        # self._log_info("Case1求解完成", f"在{N}个组合中找到{valid_solutions}个有效解")
+        # self._log_info("=" * 60)
         
         return final_sol, final_valid
     
@@ -1097,7 +1097,7 @@ class Case1BatchSolver:
         N_base = N_expanded // 3  # N
         N_phi = 6 * N_base  # 6*N
         
-        self._log_debug(f"{case_type}碰撞三角形计算", f"N_expanded={N_expanded}, N_base={N_base}, N_phi={N_phi}")
+        # self._log_debug(f"{case_type}碰撞三角形计算", f"N_expanded={N_expanded}, N_base={N_base}, N_phi={N_phi}")
         
         # 初始化规则化数组
         colli = np.full((N_phi, 3, 2), np.inf, dtype=np.float64)
@@ -1105,34 +1105,34 @@ class Case1BatchSolver:
         
         # 批量计算有效的碰撞三角形
         valid_indices = np.where(valid_mask)[0]
-        self._log_debug(f"{case_type}有效索引", f"数量={len(valid_indices)}, 索引={valid_indices}")
+        # self._log_debug(f"{case_type}有效索引", f"数量={len(valid_indices)}, 索引={valid_indices}")
         
         if len(valid_indices) > 0:
             # 计算对应的扩展组合索引
             exp_indices = valid_indices // 2
-            self._log_debug(f"{case_type}扩展组合索引", f"exp_indices={exp_indices}")
+            # self._log_debug(f"{case_type}扩展组合索引", f"exp_indices={exp_indices}")
             
             # 获取有效的phi值和组合
             valid_phi = phi[valid_indices]
             valid_combinations = expanded[exp_indices]
-            self._log_debug(f"{case_type}有效phi值详细", f"valid_phi={valid_phi}")
-            self._log_array_detailed(f"{case_type}有效组合详细", valid_combinations)
+            # self._log_debug(f"{case_type}有效phi值详细", f"valid_phi={valid_phi}")
+            # self._log_array_detailed(f"{case_type}有效组合详细", valid_combinations)
             
             # 批量计算旋转变换
             t_values = valid_combinations[:, :, 0]  # (N_valid, 3)
             theta_values = valid_combinations[:, :, 1]  # (N_valid, 3)
-            self._log_array_detailed(f"{case_type}t值详细", t_values)
-            self._log_array_detailed(f"{case_type}theta值详细", theta_values)
+            # self._log_array_detailed(f"{case_type}t值详细", t_values)
+            # self._log_array_detailed(f"{case_type}theta值详细", theta_values)
             
             # 广播计算：phi + theta
             phi_plus_theta = valid_phi[:, None] + theta_values  # (N_valid, 3)
-            self._log_array_detailed(f"{case_type}phi+theta详细", phi_plus_theta)
+            # self._log_array_detailed(f"{case_type}phi+theta详细", phi_plus_theta)
             
             # 批量计算x和y坐标
             x_coords = t_values * np.cos(phi_plus_theta)  # (N_valid, 3)
             y_coords = t_values * np.sin(phi_plus_theta)  # (N_valid, 3)
-            self._log_array_detailed(f"{case_type}x坐标详细", x_coords)
-            self._log_array_detailed(f"{case_type}y坐标详细", y_coords)
+            # self._log_array_detailed(f"{case_type}x坐标详细", x_coords)
+            # self._log_array_detailed(f"{case_type}y坐标详细", y_coords)
             
             # 将结果存储到规则化数组中
             colli[valid_indices, :, 0] = x_coords
@@ -1144,24 +1144,24 @@ class Case1BatchSolver:
                 t1 = y_coords[:, 2] - (y_coords[:, 1] + y_coords[:, 0]) / 2  # t1: yp2-(yp1+yp0)/2
                 t2 = x_coords[:, 2] - x_coords[:, 0]  # t2: xp2-xp0
                 t3 = x_coords[:, 2] - x_coords[:, 1]  # t3: xp2-xp1
-                self._log_debug("水平边关键量计算公式", "t1=yp2-(yp1+yp0)/2, t2=xp2-xp0, t3=xp2-xp1")
+                # self._log_debug("水平边关键量计算公式", "t1=yp2-(yp1+yp0)/2, t2=xp2-xp0, t3=xp2-xp1")
             else:  # vertical
                 # 竖直边关键量计算
                 t1 = x_coords[:, 2] - (x_coords[:, 1] + x_coords[:, 0]) / 2  # t1: xp2-(xp1+xp0)/2
                 t2 = y_coords[:, 2] - y_coords[:, 0]  # t2: yp2-yp0
                 t3 = y_coords[:, 2] - y_coords[:, 1]  # t3: yp2-yp1
-                self._log_debug("竖直边关键量计算公式", "t1=xp2-(xp1+xp0)/2, t2=yp2-yp0, t3=yp2-yp1")
+                # self._log_debug("竖直边关键量计算公式", "t1=xp2-(xp1+xp0)/2, t2=yp2-yp0, t3=yp2-yp1")
             
-            self._log_array_detailed(f"{case_type}关键量t1详细", t1)
-            self._log_array_detailed(f"{case_type}关键量t2详细", t2)
-            self._log_array_detailed(f"{case_type}关键量t3详细", t3)
+            # self._log_array_detailed(f"{case_type}关键量t1详细", t1)
+            # self._log_array_detailed(f"{case_type}关键量t2详细", t2)
+            # self._log_array_detailed(f"{case_type}关键量t3详细", t3)
             
             key[valid_indices, 0] = t1
             key[valid_indices, 1] = t2
             key[valid_indices, 2] = t3
         
         valid_count = np.sum(valid_mask)
-        self._log_debug(f"{case_type}碰撞三角形和关键量计算完成", f"{valid_count}个有效项，规则化存储")
+        # self._log_debug(f"{case_type}碰撞三角形和关键量计算完成", f"{valid_count}个有效项，规则化存储")
         return colli, key
     
     def _solve_batch_regularized(self, colli: np.ndarray, key: np.ndarray, 
