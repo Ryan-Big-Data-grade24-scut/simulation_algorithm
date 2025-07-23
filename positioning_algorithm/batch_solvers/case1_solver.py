@@ -103,48 +103,50 @@ class Case1BatchSolver:
     
     def _log_array_detailed(self, name: str, arr):
         """详细结构化输出数组的每个元素"""
-        if isinstance(arr, list):
-            if len(arr) == 0:
-                self._log_debug(name, "空列表")
-                return
-            
-            self._log_debug(f"{name} 详细内容", f"列表长度: {len(arr)}")
-            for i, item in enumerate(arr):
-                self._log_debug(f"{name}[{i}]", f"{item}")
-        
-        elif isinstance(arr, np.ndarray):
-            if arr.size == 0:
-                self._log_debug(name, "空数组")
-                return
-            
-            self._log_debug(f"{name} 详细内容", f"形状: {arr.shape}, 类型: {arr.dtype.name}")
-            
-            if arr.ndim == 1:
-                # 一维数组：逐个显示
-                for i in range(len(arr)):
-                    self._log_debug(f"{name}[{i}]", f"{arr[i]}")
-            
-            elif arr.ndim == 2:
-                # 二维数组：按行显示
-                for i in range(arr.shape[0]):
-                    self._log_debug(f"{name}[{i}]", f"{arr[i]}")
-            
-            elif arr.ndim == 3:
-                # 三维数组：分层显示
-                for i in range(arr.shape[0]):
-                    self._log_debug(f"{name}[{i}] 形状{arr[i].shape}", "")
-                    for j in range(arr.shape[1]):
-                        self._log_debug(f"  {name}[{i}][{j}]", f"{arr[i][j]}")
-            
-            else:
-                # 更高维数组：显示基本信息和前几个元素
-                self._log_debug(f"{name}", f"高维数组 {arr.shape}，显示前5个元素:")
-                flat_arr = arr.flatten()
-                for i in range(min(5, len(flat_arr))):
-                    self._log_debug(f"{name}.flat[{i}]", f"{flat_arr[i]}")
-        
-        else:
-            self._log_debug(name, f"类型: {type(arr)}, 内容: {arr}")
+        # 性能优化：注释掉所有详细日志输出
+        pass
+        # if isinstance(arr, list):
+        #     if len(arr) == 0:
+        #         self._log_debug(name, "空列表")
+        #         return
+        #     
+        #     self._log_debug(f"{name} 详细内容", f"列表长度: {len(arr)}")
+        #     for i, item in enumerate(arr):
+        #         self._log_debug(f"{name}[{i}]", f"{item}")
+        # 
+        # elif isinstance(arr, np.ndarray):
+        #     if arr.size == 0:
+        #         self._log_debug(name, "空数组")
+        #         return
+        #     
+        #     self._log_debug(f"{name} 详细内容", f"形状: {arr.shape}, 类型: {arr.dtype.name}")
+        #     
+        #     if arr.ndim == 1:
+        #         # 一维数组：逐个显示
+        #         for i in range(len(arr)):
+        #             self._log_debug(f"{name}[{i}]", f"{arr[i]}")
+        #     
+        #     elif arr.ndim == 2:
+        #         # 二维数组：按行显示
+        #         for i in range(arr.shape[0]):
+        #             self._log_debug(f"{name}[{i}]", f"{arr[i]}")
+        #     
+        #     elif arr.ndim == 3:
+        #         # 三维数组：分层显示
+        #         for i in range(arr.shape[0]):
+        #             self._log_debug(f"{name}[{i}] 形状{arr[i].shape}", "")
+        #             for j in range(arr.shape[1]):
+        #                 self._log_debug(f"  {name}[{i}][{j}]", f"{arr[i][j]}")
+        #     
+        #     else:
+        #         # 更高维数组：显示基本信息和前几个元素
+        #         self._log_debug(f"{name}", f"高维数组 {arr.shape}，显示前5个元素:")
+        #         flat_arr = arr.flatten()
+        #         for i in range(min(5, len(flat_arr))):
+        #             self._log_debug(f"{name}.flat[{i}]", f"{flat_arr[i]}")
+        # 
+        # else:
+        #     self._log_debug(name, f"类型: {type(arr)}, 内容: {arr}")
 
     def _log_array(self, name: str, arr, show_content: bool = True):
         """简单的数组/列表日志打印函数"""
@@ -259,17 +261,20 @@ class Case1BatchSolver:
         
         # 第四层: 批量求解
         # self._log_debug("第四层: 批量求解")
-        sol_h = self._solve_batch_regularized(colli_h, key_h, phi_h, valid_h, "horizontal")
-        sol_v = self._solve_batch_regularized(colli_v, key_v, phi_v, valid_v, "vertical")
+        sol_h, valid_h = self._solve_batch_regularized(colli_h, key_h, phi_h, valid_h, "horizontal")
+        sol_v, valid_v = self._solve_batch_regularized(colli_v, key_v, phi_v, valid_v, "vertical")
         
         # self._log_array_detailed("水平边解详细", sol_h)
         # self._log_array_detailed("竖直边解详细", sol_v)
+        # self._log_array_detailed("水平边有效掩码详细", valid_h)
+        # self._log_array_detailed("竖直边有效掩码详细", valid_v)
         
         # 第五层：合并结果(12N, 5) -> (N, 12, 5)
         # self._log_debug("第五层: 合并结果")
         final_sol, final_valid = self._merge_solutions_regularized(sol_h, sol_v, valid_h, valid_v, indices, N)
         
         # self._log_array_detailed("最终解详细", final_sol)
+        # self._log_array_detailed("最终有效掩码详细", final_valid)
         
         # 最终统计
         valid_solutions = np.sum(~np.isinf(final_sol[:, 0]))
@@ -1195,17 +1200,20 @@ class Case1BatchSolver:
         valid_colli = colli[valid_indices]  # (N_valid, 3, 2)
         valid_key = key[valid_indices]      # (N_valid, 3)
         valid_phi = phi[valid_indices]      # (N_valid,)
+
+        # 之后valid_mask会更新
+        valid_mask_new = valid_mask.copy()
         
         # 批量计算解
         if case_type == "horizontal":
-            sol_valid = self._solve_horizontal_batch_regularized(valid_colli, valid_key, valid_phi)
+            sol_valid, valid_mask_new = self._solve_horizontal_batch_regularized(valid_colli, valid_key, valid_phi)
         else:  # vertical
-            sol_valid = self._solve_vertical_batch_regularized(valid_colli, valid_key, valid_phi)
+            sol_valid, valid_mask_new = self._solve_vertical_batch_regularized(valid_colli, valid_key, valid_phi)
         
         # 将结果存储到规则化数组中
         sol[valid_indices] = sol_valid
         
-        return sol
+        return sol, valid_mask_new
     
     def _solve_horizontal_batch_regularized(self, colli: np.ndarray, key: np.ndarray, 
                                           phi: np.ndarray) -> np.ndarray:
@@ -1329,7 +1337,11 @@ class Case1BatchSolver:
         valid_sol_count = np.sum(~np.isinf(sol[:, 0]))
         self._log_debug("水平边求解完成", f"得到{valid_sol_count}个有效解")
         
-        return sol
+        # 计算所有合法解的掩码——通过中间量掩码计算
+        final_mask = boundary_mask & (~invalid_mask) | same_sign_mask & (~boundary_mask) & (~invalid_mask)
+        self._log_array_detailed("水平边最终解掩码", final_mask)
+
+        return sol, final_mask
     
     def _solve_vertical_batch_regularized(self, colli: np.ndarray, key: np.ndarray, 
                                         phi: np.ndarray) -> np.ndarray:
@@ -1418,7 +1430,10 @@ class Case1BatchSolver:
                 sol[final_indices, 3] = valid_y_center + self.tolerance  # ymax
                 sol[final_indices, 4] = phi[final_indices]              # phi
         
-        return sol
+        # 最终掩码
+        final_mask = boundary_mask & (~invalid_mask) | same_sign_mask & (~boundary_mask) & (~invalid_mask)
+
+        return sol, final_mask
     
     def _merge_solutions_regularized(self, sol_h: np.ndarray, sol_v: np.ndarray,
                                valid_h: np.ndarray, valid_v: np.ndarray,

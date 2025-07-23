@@ -5,7 +5,7 @@ class VirtualRobot:
     def __init__(self, 
                  x: float = 5.0, 
                  y: float = 5.0, 
-                 phi: float = np.pi/4,
+                 phi: float = 0,
                  m: float = 20.0,
                  n: float = 10.0,
                  boundary_lines: List[Tuple[Tuple[float, float], Tuple[float, float]]] = None,
@@ -42,10 +42,18 @@ class VirtualRobot:
         self.y = y
         self.phi = phi
     
-    def scan(self) -> Tuple[np.ndarray, np.ndarray]:
+    def scan(self, 
+            noise_type: str = 'gaussian', 
+            noise_scale: float = 0.1) -> Tuple[np.ndarray, np.ndarray]:
         """
-        执行激光扫描（严格匹配图片中的需求）
-        返回: (激光距离数组, 激光全局角度数组)
+        执行带噪声的激光扫描
+        
+        Args:
+            noise_type: 噪声类型 ('gaussian' 或 'uniform')
+            noise_scale: 噪声强度（高斯噪声为标准差，均匀噪声为半区间宽度）
+            
+        Returns:
+            (带噪声的距离数组, 全局角度数组) - 角度保持精确值
         """
         distances = []
         global_angles = []
@@ -55,15 +63,26 @@ class VirtualRobot:
             laser_x = self.x + rel_r * np.cos(self.phi + rel_angle)
             laser_y = self.y + rel_r * np.sin(self.phi + rel_angle)
             
-            # 计算激光全局角度
+            # 计算激光全局角度（保持精确值）
             current_angle = self.phi + laser_angle
             
             # 精确碰撞检测
-            dist = self._raycast(laser_x, laser_y, current_angle)
+            true_dist = self._raycast(laser_x, laser_y, current_angle)
             
-            distances.append(dist)
+            # 添加噪声
+            if noise_type == 'gaussian':
+                noisy_dist = true_dist + np.random.normal(0, noise_scale)
+            elif noise_type == 'uniform':
+                noisy_dist = true_dist + np.random.uniform(-noise_scale, noise_scale)
+            else:
+                noisy_dist = true_dist  # 无噪声
+            
+            # 确保距离非负
+            noisy_dist = max(0.0, noisy_dist)
+            
+            distances.append(noisy_dist)
             global_angles.append(current_angle)
-        print(distances)
+        
         return np.array(distances), np.array(global_angles)
 
     def _raycast(self, x: float, y: float, angle: float) -> float:

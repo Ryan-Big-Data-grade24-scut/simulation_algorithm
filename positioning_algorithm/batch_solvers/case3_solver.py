@@ -103,95 +103,99 @@ class Case3BatchSolver:
     
     def _log_layer_summary(self, layer_name: str, data_dict: dict):
         """输出每一层的详细数组内容"""
-        self._log_debug(f"=== {layer_name} 详细输出 ===")
-        for key, value in data_dict.items():
-            if isinstance(value, np.ndarray):
-                if value.size == 0:
-                    self._log_debug(f"  {key}: 空数组")
-                else:
-                    self._log_debug(f"  {key}: 形状{value.shape}, 类型{value.dtype}")
-                    # 显示所有元素
-                    if value.ndim == 1:
-                        # 一维数组：逐个显示
-                        for i in range(len(value)):
-                            self._log_debug(f"    [{i}]: {value[i]}")
-                    elif value.ndim == 2:
-                        # 二维数组：按行显示
-                        for i in range(value.shape[0]):
-                            self._log_debug(f"    [{i}]: {value[i]}")
-                    elif value.ndim == 3:
-                        # 三维数组：分层显示
-                        for i in range(value.shape[0]):
-                            self._log_debug(f"    [{i}]: 形状{value[i].shape}")
-                            for j in range(value.shape[1]):
-                                self._log_debug(f"      [{i}][{j}]: {value[i][j]}")
-                    else:
-                        # 更高维数组：显示扁平化前几个元素
-                        flat_arr = value.flatten()
-                        for i in range(min(20, len(flat_arr))):
-                            self._log_debug(f"    flat[{i}]: {flat_arr[i]}")
-                        if len(flat_arr) > 20:
-                            self._log_debug(f"    ... (还有{len(flat_arr)-20}个元素)")
-            elif isinstance(value, list):
-                if len(value) == 0:
-                    self._log_debug(f"  {key}: 空列表")
-                else:
-                    self._log_debug(f"  {key}: 列表长度{len(value)}")
-                    for i in range(len(value)):
-                        if isinstance(value[i], list):
-                            self._log_debug(f"    [{i}]: 子列表长度{len(value[i])}")
-                            for j in range(len(value[i])):
-                                self._log_debug(f"      [{i}][{j}]: {value[i][j]}")
-                        else:
-                            self._log_debug(f"    [{i}]: {value[i]}")
-            else:
-                self._log_debug(f"  {key}: {value}")
-        self._log_debug("")
+        # 性能优化：注释掉所有详细日志输出
+        pass
+        # self._log_debug(f"=== {layer_name} 详细输出 ===")
+        # for key, value in data_dict.items():
+        #     if isinstance(value, np.ndarray):
+        #         if value.size == 0:
+        #             self._log_debug(f"  {key}: 空数组")
+        #         else:
+        #             self._log_debug(f"  {key}: 形状{value.shape}, 类型{value.dtype}")
+        #             # 显示所有元素
+        #             if value.ndim == 1:
+        #                 # 一维数组：逐个显示
+        #                 for i in range(len(value)):
+        #                     self._log_debug(f"    [{i}]: {value[i]}")
+        #             elif value.ndim == 2:
+        #                 # 二维数组：按行显示
+        #                 for i in range(value.shape[0]):
+        #                     self._log_debug(f"    [{i}]: {value[i]}")
+        #             elif value.ndim == 3:
+        #                 # 三维数组：分层显示
+        #                 for i in range(value.shape[0]):
+        #                     self._log_debug(f"    [{i}]: 形状{value[i].shape}")
+        #                     for j in range(value.shape[1]):
+        #                         self._log_debug(f"      [{i}][{j}]: {value[i][j]}")
+        #             else:
+        #                 # 更高维数组：显示扁平化前几个元素
+        #                 flat_arr = value.flatten()
+        #                 for i in range(min(20, len(flat_arr))):
+        #                     self._log_debug(f"    flat[{i}]: {flat_arr[i]}")
+        #                 if len(flat_arr) > 20:
+        #                     self._log_debug(f"    ... (还有{len(flat_arr)-20}个元素)")
+        #     elif isinstance(value, list):
+        #         if len(value) == 0:
+        #             self._log_debug(f"  {key}: 空列表")
+        #         else:
+        #             self._log_debug(f"  {key}: 列表长度{len(value)}")
+        #             for i in range(len(value)):
+        #                 if isinstance(value[i], list):
+        #                     self._log_debug(f"    [{i}]: 子列表长度{len(value[i])}")
+        #                     for j in range(len(value[i])):
+        #                         self._log_debug(f"      [{i}][{j}]: {value[i][j]}")
+        #                 else:
+        #                     self._log_debug(f"    [{i}]: {value[i]}")
+        #     else:
+        #         self._log_debug(f"  {key}: {value}")
+        # self._log_debug("")
 
     def _log_array_detailed(self, name: str, arr):
         """详细结构化输出数组的每个元素"""
-        if isinstance(arr, list):
-            if len(arr) == 0:
-                self._log_debug(name, "空列表")
-                return
-            
-            self._log_debug(f"{name} 详细内容", f"列表长度: {len(arr)}")
-            for i, item in enumerate(arr):
-                self._log_debug(f"{name}[{i}]", f"{item}")
-        
-        elif isinstance(arr, np.ndarray):
-            if arr.size == 0:
-                self._log_debug(name, "空数组")
-                return
-            
-            self._log_debug(f"{name} 详细内容", f"形状: {arr.shape}, 类型: {arr.dtype.name}")
-            
-            if arr.ndim == 1:
-                # 一维数组：逐个显示
-                for i in range(len(arr)):
-                    self._log_debug(f"{name}[{i}]", f"{arr[i]}")
-            
-            elif arr.ndim == 2:
-                # 二维数组：按行显示
-                for i in range(arr.shape[0]):
-                    self._log_debug(f"{name}[{i}]", f"{arr[i]}")
-            
-            elif arr.ndim == 3:
-                # 三维数组：分层显示
-                for i in range(arr.shape[0]):
-                    self._log_debug(f"{name}[{i}] 形状{arr[i].shape}", "")
-                    for j in range(arr.shape[1]):
-                        self._log_debug(f"  {name}[{i}][{j}]", f"{arr[i][j]}")
-            
-            else:
-                # 更高维数组：显示基本信息和前几个元素
-                self._log_debug(f"{name}", f"高维数组 {arr.shape}，显示前5个元素:")
-                flat_arr = arr.flatten()
-                for i in range(min(5, len(flat_arr))):
-                    self._log_debug(f"{name}.flat[{i}]", f"{flat_arr[i]}")
-        
-        else:
-            self._log_debug(name, f"类型: {type(arr)}, 内容: {arr}")
+        # 性能优化：注释掉所有详细日志输出
+        pass
+        # if isinstance(arr, list):
+        #     if len(arr) == 0:
+        #         self._log_debug(name, "空列表")
+        #         return
+        #     
+        #     self._log_debug(f"{name} 详细内容", f"列表长度: {len(arr)}")
+        #     for i, item in enumerate(arr):
+        #         self._log_debug(f"{name}[{i}]", f"{item}")
+        # 
+        # elif isinstance(arr, np.ndarray):
+        #     if arr.size == 0:
+        #         self._log_debug(name, "空数组")
+        #         return
+        #     
+        #     self._log_debug(f"{name} 详细内容", f"形状: {arr.shape}, 类型: {arr.dtype.name}")
+        #     
+        #     if arr.ndim == 1:
+        #         # 一维数组：逐个显示
+        #         for i in range(len(arr)):
+        #             self._log_debug(f"{name}[{i}]", f"{arr[i]}")
+        #     
+        #     elif arr.ndim == 2:
+        #         # 二维数组：按行显示
+        #         for i in range(arr.shape[0]):
+        #             self._log_debug(f"{name}[{i}]", f"{arr[i]}")
+        #     
+        #     elif arr.ndim == 3:
+        #         # 三维数组：分层显示
+        #         for i in range(arr.shape[0]):
+        #             self._log_debug(f"{name}[{i}] 形状{arr[i].shape}", "")
+        #             for j in range(arr.shape[1]):
+        #                 self._log_debug(f"  {name}[{i}][{j}]", f"{arr[i][j]}")
+        #     
+        #     else:
+        #         # 更高维数组：显示基本信息和前几个元素
+        #         self._log_debug(f"{name}", f"高维数组 {arr.shape}，显示前5个元素:")
+        #         flat_arr = arr.flatten()
+        #         for i in range(min(5, len(flat_arr))):
+        #             self._log_debug(f"{name}.flat[{i}]", f"{flat_arr[i]}")
+        # 
+        # else:
+        #     self._log_debug(name, f"类型: {type(arr)}, 内容: {arr}")
 
     def _log_array(self, name: str, arr, show_content: bool = True):
         """简单的数组/列表日志打印函数"""

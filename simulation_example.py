@@ -1,4 +1,3 @@
-
 import os
 import glob
 from simulation_entries.robot import VirtualRobot 
@@ -26,7 +25,7 @@ enable_ros_logging = False
 ros_logger = None
 
 # 初始化（使用默认参数）
-robot = VirtualRobot(laser_configs=lsr_cfg)
+robot = VirtualRobot(phi=np.pi, laser_configs=lsr_cfg)
 solver = PoseSolver(
     20, 10, robot.laser_configs,
     config=None,
