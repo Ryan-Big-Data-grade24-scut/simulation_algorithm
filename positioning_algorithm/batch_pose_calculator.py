@@ -6,6 +6,7 @@ import numpy as np
 import logging
 from typing import List, Tuple, Optional
 from itertools import combinations
+import ros_logger
 
 # 导入配置类
 class SolverConfig:
@@ -23,7 +24,7 @@ class PoseSolver:
                  laser_config: List,
                  tol: float = 1e-3,
                  config: Optional[SolverConfig] = None,
-                 ros_logger=None):
+                 Rcl_logger:ros_logger = None):
         """
         初始化位姿求解器
         
@@ -40,27 +41,40 @@ class PoseSolver:
         self.laser_config = laser_config
         self.tol = tol
         self.config = config or SolverConfig(tolerance=tol)
-        self.ros_logger = ros_logger
+        self.ros_logger:ros_logger = Rcl_logger
         
         # 初始化日志
-        self._setup_logging()
+        if self.ros_logger:
+            """
+            Args:
+            logger_name: 日志器名称(如"solver.case1")
+            log_dir: 日志子目录(如"batches")
+            level: 日志级别(rclpy.logging.LoggingSeverity)
+            由于我们不可能在这里导入rclpy
+            所以使用int代替日志级别
+                分别是
+            rclpy.logging.LoggingSeverity.DEBUG = 10
+            rclpy.logging.LoggingSeverity.INFO = 20
+            rclpy.logging.LoggingSeverity.WARN = 30
+            rclpy.logging.LoggingSeverity.ERROR = 40
+            rclpy.logging.LoggingSeverity.FATAL = 50
+            不过，我们ros_logger在创建时已设置默认级别
+            """
+            self.logger = self.ros_logger.get_logger("PoseSolver", "batches")
+        else: 
+            self._setup_logging()
         
         # 预计算激光参数（只计算一次）
         self.laser_params = self._precompute_laser_params()
         
         # 导入批处理求解器
-        from .batch_solvers import trig_cache, Case1BatchSolver, Case2BatchSolver, Case3BatchSolver
+        from .batch_solvers import trig_cache, Case1BatchSolver, Case3BatchSolver
         self.trig_cache = trig_cache
-        
-        # 判断是否启用ROS日志
-        enable_ros_logging = ros_logger is not None
         
         # 创建求解器时传递日志参数
         self.case1_solver = Case1BatchSolver(m, n, self.config.tolerance, 
-                                           enable_ros_logging=enable_ros_logging, 
-                                           ros_logger=ros_logger)
-        self.case2_solver = Case2BatchSolver(m, n, self.config.tolerance)
-        self.case3_solver = Case3BatchSolver(m, n, self.config.tolerance)
+                                           ros_logger=self.ros_logger)
+        self.case3_solver = Case3BatchSolver(m, n, self.config.tolerance, ros_logger=self.ros_logger)
         
         self.logger.info(f"PoseSolver初始化完成: 场地({m}x{n}), {len(laser_config)}个激光")
     
@@ -112,8 +126,17 @@ class PoseSolver:
         
         # self.logger.info(f"开始求解: 距离={distances}")
         
+        """
+        实际使用的时候，我们发现有些激光头坏了
+        这个时候，它返回的值就是0
+        所以我们要添加掩码，在计算碰撞向量参数的时候，就把这些坏掉的激光头给删了
+        """
+
+        # 0.5 可用激光——掩码：可用为1 不可用为0
+        valid_mask = distances > 0.5  # 可用激光的掩码
+        
         # 1. 计算碰撞向量参数
-        collision_params = self._calculate_collision_vectors(distances)
+        collision_params = self._calculate_collision_vectors(distances, valid_mask)
         
         # 2. 生成三激光组合
         combinations = self._generate_combinations(collision_params)
@@ -156,10 +179,29 @@ class PoseSolver:
         
         return results
     
-    def _calculate_collision_vectors(self, distances: np.ndarray) -> np.ndarray:
+    def _calculate_collision_vectors(self, distances: np.ndarray, valid_mask: np.ndarray) -> np.ndarray:
         """计算碰撞向量参数"""
-        collision_params = []
+        valid_sum = np.sum(valid_mask)
+        if valid_sum == 0:
+            self.logger.warning("没有有效的激光距离，返回空数组")
+            return np.array([]).reshape(0, 2)
+        valid_indice = np.where(valid_mask)[0]
+        collision_params = np.zeros((valid_sum, 2), dtype=np.float64)
+        #计算激光碰撞向量参数 t——距离 theta——角度
+        x = self.laser_params[valid_indice, 0] * np.cos(self.laser_params[valid_indice, 1]) + distances[valid_indice] * np.cos(self.laser_params[valid_indice, 2])
+        y = self.laser_params[valid_indice, 0] * np.sin(self.laser_params[valid_indice, 1]) + distances[valid_indice] * np.sin(self.laser_params[valid_indice, 2])
+        collision_params[:, 0] = np.linalg.norm([x, y], axis=0)  # 计算距离 t
+        # 归一化角度到[-π, π]范围
+        collision_params[:, 1] = np.arctan2(y, x)  # 计算角度 theta
+        collision_params[:, 1] = np.where(collision_params[:, 1] > np.pi, collision_params[:, 1] - 2 * np.pi, collision_params[:, 1])
         
+        """
+        原本的计算激光参量的算法太慢了，我都用np数组了
+        直接批量计算
+        """
+        
+
+        """
         for i, distance in enumerate(distances):
             rel_r, rel_angle, laser_angle = self.laser_params[i]
             
@@ -180,8 +222,9 @@ class PoseSolver:
             collision_params.append([t_val, theta_val])
             
             # self.logger.debug(f"激光{i}: t={t_val:.6f}, theta={theta_val:.6f}")
+        """
         
-        return np.array(collision_params)
+        return collision_params
     
     def _generate_combinations(self, collision_params: np.ndarray) -> np.ndarray:
         """生成三激光组合"""

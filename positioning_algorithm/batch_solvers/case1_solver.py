@@ -11,8 +11,7 @@ from .trig_cache import trig_cache
 class Case1BatchSolver:
     """Case1批处理求解器类"""
     
-    def __init__(self, m: float, n: float, tolerance: float = 1e-3, 
-                 enable_ros_logging: bool = False, ros_logger=None):
+    def __init__(self, m: float, n: float, tolerance: float = 1e-3, ros_logger=None):
         """
         初始化Case1求解器
         
@@ -26,11 +25,13 @@ class Case1BatchSolver:
         self.m = m
         self.n = n
         self.tolerance = tolerance
-        self.enable_ros_logging = enable_ros_logging
-        self.ros_logger = ros_logger if enable_ros_logging else None
-        
-        # 设置日志系统
-        self._setup_logging()
+        self.ros_logger = ros_logger
+        if self.ros_logger:
+            # 如果启用ROS日志，我们就创建一个handler
+            self.logger = self.ros_logger.get_logger("solver.case1", "batches/case1")
+        else:
+            # 设置日志系统
+            self._setup_logging()
         
         self._log_info("Case1BatchSolver初始化完成", 
                       f"场地尺寸: {m}x{n}, 容差: {tolerance}")

@@ -83,6 +83,10 @@ class VirtualRobot:
             distances.append(noisy_dist)
             global_angles.append(current_angle)
         
+        # 测试一下——强行让一个激光头的数据为0
+
+        #distances[0] = 0.0  # 模拟一个激光头坏掉
+
         return np.array(distances), np.array(global_angles)
 
     def _raycast(self, x: float, y: float, angle: float) -> float:

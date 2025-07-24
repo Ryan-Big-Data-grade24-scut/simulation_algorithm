@@ -27,10 +27,14 @@ class Case3BatchSolver:
         self.n = n
         self.tolerance = tolerance
         self.enable_ros_logging = enable_ros_logging
-        self.ros_logger = ros_logger if enable_ros_logging else None
-        
-        # 设置日志系统
-        self._setup_logging()
+        self.ros_logger = ros_logger
+
+        if self.ros_logger:
+            # 如果启用ROS日志，我们就创建一个handler
+            self.logger = self.ros_logger.get_logger("solver.case3", "batches/case3")
+        else:
+            # 设置日志系统
+            self._setup_logging()
         
         self._log_info("Case3BatchSolver初始化完成", 
                       f"场地尺寸: {m}x{n}, 容差: {tolerance}")
