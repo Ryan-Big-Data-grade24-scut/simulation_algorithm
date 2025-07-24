@@ -49,12 +49,10 @@ class Case1BatchSolver:
             if isinstance(handler, logging.FileHandler):
                 handler.close()
                 self.logger.removeHandler(handler)
-        
-        # 根据ROS状态设置日志等级
-        if self.enable_ros_logging:
-            self.min_log_level = logging.WARNING  # ROS模式下只输出WARNING及以上
-        else:
-            self.min_log_level = logging.DEBUG    # Windows调试模式下输出详细日志
+
+        # 根据ROS状态设置日志等级，然而当调用这个函数的时候，肯定时windows
+        self.enable_ros_logging = False
+        self.min_log_level = logging.DEBUG    # Windows调试模式下输出详细日志
         
         # 添加文件日志器（Windows调试用）
         if not self.enable_ros_logging:

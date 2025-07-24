@@ -6,7 +6,7 @@ import numpy as np
 import logging
 from typing import List, Tuple, Optional
 from itertools import combinations
-import ros_logger
+from . import ros_logger
 
 # 导入配置类
 class SolverConfig:

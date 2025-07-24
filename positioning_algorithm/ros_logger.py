@@ -1,5 +1,8 @@
 import os
-import rclpy
+try:
+    import rclpy
+except:
+    rclpy = None
 from datetime import datetime
 from typing import Optional
 
@@ -10,7 +13,7 @@ class RclLogger:
                  node,  # rclpy.node.Node实例
                  log_root: Optional[str] = None,
                  session_id: Optional[str] = None,
-                 default_level: int = rclpy.logging.LoggingSeverity.ERROR):
+                 default_level: int = 40):
         """
         Args:
             node: ROS 2节点实例
@@ -28,7 +31,7 @@ class RclLogger:
     def get_logger(self, 
                   logger_name: str,
                   log_hierarchy: str = "",
-                  level: Optional[int] = None) -> rclpy.logging.Logger:
+                  level: Optional[int] = None):
         """
         获取配置好的ROS Logger
         
