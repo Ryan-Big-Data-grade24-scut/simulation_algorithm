@@ -7,6 +7,7 @@ import logging
 from typing import List, Tuple, Optional
 from itertools import combinations
 from . import ros_logger
+from .batch_solvers.Base_log import BaseLog
 
 # 导入配置类
 class SolverConfig:
@@ -15,7 +16,7 @@ class SolverConfig:
         self.tolerance = tolerance
         self.max_solutions = max_solutions
 
-class PoseSolver:
+class PoseSolver(BaseLog):
     """位姿求解器（与原接口兼容）"""
     
     def __init__(self, 
@@ -46,7 +47,7 @@ class PoseSolver:
         
         # 初始化日志
         if self.ros_logger is None:
-            self._setup_logging()
+            self._setup_logging(self.solver_name)
         
         # 预计算激光参数（只计算一次）
         self.laser_params = self._precompute_laser_params()
@@ -61,56 +62,7 @@ class PoseSolver:
         
         self._log_info(f"PoseSolver初始化完成: 场地({m}x{n}), {len(laser_config)}个激光")
     
-    # ==================== 统一日志封装函数 ====================
-    def _log_debug(self, message: str):
-        """调试级别日志"""
-        if self.ros_logger is not None:
-            self.ros_logger.get_logger().debug(f"[{self.solver_name}] {message}")
-        else:
-            self.logger.debug(message)
-    
-    def _log_info(self, message: str):
-        """信息级别日志"""
-        if self.ros_logger is not None:
-            self.ros_logger.get_logger().info(f"[{self.solver_name}] {message}")
-        else:
-            self.logger.info(message)
-    
-    def _log_warning(self, message: str):
-        """警告级别日志"""
-        if self.ros_logger is not None:
-            self.ros_logger.get_logger().warn(f"[{self.solver_name}] {message}")
-        else:
-            self.logger.warning(message)
-    
-    def _log_error(self, message: str):
-        """错误级别日志"""
-        if self.ros_logger is not None:
-            self.ros_logger.get_logger().error(f"[{self.solver_name}] {message}")
-        else:
-            self.logger.error(message)
-    
-    def _setup_logging(self):
-        """设置日志系统"""
-        import os
-        
-        # 创建logs目录
-        os.makedirs('logs', exist_ok=True)
-        
-        self.logger = logging.getLogger("PoseSolverFilter")
-        
-        # 清理已有的handlers，避免重复添加
-        for handler in self.logger.handlers[:]:
-            if isinstance(handler, logging.FileHandler):
-                handler.close()
-                self.logger.removeHandler(handler)
-        
-        # 添加文件日志器
-        handler = logging.FileHandler("logs/pose_solver_filter.log", encoding="utf-8")
-        formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
-        self.logger.setLevel(logging.DEBUG)  # 设置为DEBUG级别以显示详细数组日志
+
     
     def _precompute_laser_params(self) -> np.ndarray:
         """预计算激光参数（初始化时计算一次）"""
@@ -154,10 +106,6 @@ class PoseSolver:
         
         # 2. 生成三激光组合
         combinations = self._generate_combinations(collision_params)
-        
-        # 3. 更新三角函数缓存（只更新变化的角度）
-        if len(combinations) > 0:
-            self.trig_cache.update_combinations(combinations)
         
         # 4. 创建可扩展的解列表，预分配空间（N_cbn组合的解）
         N_cbn = len(combinations)

@@ -6,8 +6,9 @@ import numpy as np
 import os
 from typing import List, Tuple
 import logging
+from .Base_log import BaseLog
 
-class Case1BatchSolver:
+class Case1BatchSolver(BaseLog):
     """Case1批处理求解器类"""
     
     def __init__(self, m: float, n: float, tolerance: float = 1e-3, ros_logger=None):
@@ -28,153 +29,9 @@ class Case1BatchSolver:
         
         # 初始化日志
         if self.ros_logger is None:
-            self._setup_logging()
-        
+            self._setup_logging(self.solver_name)
+
         self._log_info(f"Case1BatchSolver初始化完成: 场地尺寸: {m}x{n}, 容差: {tolerance}")
-    
-    def _setup_logging(self):
-        """设置兼容ROS和Windows的日志系统"""
-        # 创建logs目录
-        os.makedirs('logs', exist_ok=True)
-        
-        # 初始化标准日志器
-        self.logger = logging.getLogger("Case1BatchSolver")
-        
-        # 清理已有的handlers，避免重复添加
-        for handler in self.logger.handlers[:]:
-            if isinstance(handler, logging.FileHandler):
-                handler.close()
-                self.logger.removeHandler(handler)
-
-        # 添加文件日志器
-        handler = logging.FileHandler("logs/case1_batch_solver.log", encoding="utf-8")
-        formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
-        self.logger.setLevel(logging.DEBUG)
-    
-    def _log_debug(self, message: str):
-        """调试级别日志"""
-        if self.ros_logger is not None:
-            self.ros_logger.get_logger().debug(f"[{self.solver_name}] {message}")
-        else:
-            self.logger.debug(message)
-    
-    def _log_info(self, message: str):
-        """信息级别日志"""
-        if self.ros_logger is not None:
-            self.ros_logger.get_logger().info(f"[{self.solver_name}] {message}")
-        else:
-            self.logger.info(message)
-    
-    def _log_warning(self, message: str):
-        """警告级别日志"""
-        if self.ros_logger is not None:
-            self.ros_logger.get_logger().warn(f"[{self.solver_name}] {message}")
-        else:
-            self.logger.warning(message)
-    
-    def _log_error(self, message: str):
-        """错误级别日志"""
-        if self.ros_logger is not None:
-            self.ros_logger.get_logger().error(f"[{self.solver_name}] {message}")
-        else:
-            self.logger.error(message)
-    
-    def _log_array_detailed(self, name: str, arr):
-        """详细结构化输出数组的每个元素"""
-        # 性能优化：注释掉所有详细日志输出
-        pass
-        # if isinstance(arr, list):
-        #     if len(arr) == 0:
-        #         self._log_debug(name, "空列表")
-        #         return
-        #     
-        #     self._log_debug(f"{name} 详细内容", f"列表长度: {len(arr)}")
-        #     for i, item in enumerate(arr):
-        #         self._log_debug(f"{name}[{i}]", f"{item}")
-        # 
-        # elif isinstance(arr, np.ndarray):
-        #     if arr.size == 0:
-        #         self._log_debug(name, "空数组")
-        #         return
-        #     
-        #     self._log_debug(f"{name} 详细内容", f"形状: {arr.shape}, 类型: {arr.dtype.name}")
-        #     
-        #     if arr.ndim == 1:
-        #         # 一维数组：逐个显示
-        #         for i in range(len(arr)):
-        #             self._log_debug(f"{name}[{i}]", f"{arr[i]}")
-        #     
-        #     elif arr.ndim == 2:
-        #         # 二维数组：按行显示
-        #         for i in range(arr.shape[0]):
-        #             self._log_debug(f"{name}[{i}]", f"{arr[i]}")
-        #     
-        #     elif arr.ndim == 3:
-        #         # 三维数组：分层显示
-        #         for i in range(arr.shape[0]):
-        #             self._log_debug(f"{name}[{i}] 形状{arr[i].shape}", "")
-        #             for j in range(arr.shape[1]):
-        #                 self._log_debug(f"  {name}[{i}][{j}]", f"{arr[i][j]}")
-        #     
-        #     else:
-        #         # 更高维数组：显示基本信息和前几个元素
-        #         self._log_debug(f"{name}", f"高维数组 {arr.shape}，显示前5个元素:")
-        #         flat_arr = arr.flatten()
-        #         for i in range(min(5, len(flat_arr))):
-        #             self._log_debug(f"{name}.flat[{i}]", f"{flat_arr[i]}")
-        # 
-        # else:
-        #     self._log_debug(name, f"类型: {type(arr)}, 内容: {arr}")
-
-    def _log_array(self, name: str, arr, show_content: bool = True):
-        """简单的数组/列表日志打印函数"""
-        # 处理列表类型：直接打印列表信息，不转换
-        if isinstance(arr, list):
-            if len(arr) == 0:
-                self._log_debug(f"{name}: 空列表")
-                return
-            
-            info = f"列表长度{len(arr)}"
-            
-            # 内容预览（列表直接显示前几个元素）
-            if show_content and len(arr) <= 5:
-                content_preview = str(arr)
-                if len(content_preview) > 200:  # 如果内容太长就截断
-                    content_preview = content_preview[:200] + "..."
-                info += f", 内容{content_preview}"
-            elif show_content:
-                # 显示前几个元素的类型信息
-                sample_types = [type(item).__name__ for item in arr[:3]]
-                info += f", 前3个元素类型{sample_types}"
-                for item in arr:
-                    self._log_debug(f"{name}: {item}")
-            
-            self._log_debug(f"{name}: {info}")
-            return
-        
-        # 处理numpy数组：原有逻辑
-        if arr.size == 0:
-            self._log_debug(f"{name}: 空数组")
-            return
-        
-        # 基本信息：形状和类型
-        info = f"形状{arr.shape}, 类型{arr.dtype.name}"
-        
-        # 数值统计（仅对数值类型）
-        if np.issubdtype(arr.dtype, np.number):
-            if np.all(np.isfinite(arr)):
-                info += f", 范围[{arr.min():.3f}, {arr.max():.3f}]"
-            else:
-                valid_count = np.sum(np.isfinite(arr))
-                info += f", 有效值{valid_count}/{arr.size}"
-        
-        # 内容预览（可选）
-        if show_content and arr.size <= 10:
-            for item in arr.flat:
-                self._log_debug(f"{name}: {item}")
-        self._log_debug(f"{name}: {info}")
     
     def solve(self, combinations: np.ndarray) -> np.ndarray:
         """
