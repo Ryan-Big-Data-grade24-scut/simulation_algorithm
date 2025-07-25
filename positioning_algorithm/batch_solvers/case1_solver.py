@@ -6,7 +6,6 @@ import numpy as np
 import os
 from typing import List, Tuple
 import logging
-from .trig_cache import trig_cache
 
 class Case1BatchSolver:
     """Case1批处理求解器类"""
@@ -19,22 +18,19 @@ class Case1BatchSolver:
             m: 场地宽度
             n: 场地高度  
             tolerance: 数值容差
-            enable_ros_logging: 是否启用ROS日志
-            ros_logger: ROS日志器对象
+            ros_logger: ROS节点的Logger对象（可选）
         """
         self.m = m
         self.n = n
         self.tolerance = tolerance
         self.ros_logger = ros_logger
-        if self.ros_logger:
-            # 如果启用ROS日志，我们就创建一个handler
-            self.logger = self.ros_logger.get_logger("solver.case1", "batches/case1")
-        else:
-            # 设置日志系统
+        self.solver_name = "Case1BatchSolver"
+        
+        # 初始化日志
+        if self.ros_logger is None:
             self._setup_logging()
         
-        self._log_info("Case1BatchSolver初始化完成", 
-                      f"场地尺寸: {m}x{n}, 容差: {tolerance}")
+        self._log_info(f"Case1BatchSolver初始化完成: 场地尺寸: {m}x{n}, 容差: {tolerance}")
     
     def _setup_logging(self):
         """设置兼容ROS和Windows的日志系统"""
@@ -50,55 +46,40 @@ class Case1BatchSolver:
                 handler.close()
                 self.logger.removeHandler(handler)
 
-        # 根据ROS状态设置日志等级，然而当调用这个函数的时候，肯定时windows
-        self.enable_ros_logging = False
-        self.min_log_level = logging.DEBUG    # Windows调试模式下输出详细日志
-        
-        # 添加文件日志器（Windows调试用）
-        if not self.enable_ros_logging:
-            handler = logging.FileHandler("logs/case1_batch_solver.log", encoding="utf-8")
-            formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
-        
-        self.logger.setLevel(self.min_log_level)
+        # 添加文件日志器
+        handler = logging.FileHandler("logs/case1_batch_solver.log", encoding="utf-8")
+        formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+        self.logger.setLevel(logging.DEBUG)
     
-    def _log_debug(self, title: str, content: str = ""):
+    def _log_debug(self, message: str):
         """调试级别日志"""
-        if self.enable_ros_logging and self.ros_logger:
-            # ROS模式下不输出调试信息
-            pass
+        if self.ros_logger is not None:
+            self.ros_logger.get_logger().debug(f"[{self.solver_name}] {message}")
         else:
-            if content:
-                self.logger.debug(f"{title}: {content}")
-            else:
-                self.logger.debug(title)
+            self.logger.debug(message)
     
-    def _log_info(self, title: str, content: str = ""):
+    def _log_info(self, message: str):
         """信息级别日志"""
-        if self.enable_ros_logging and self.ros_logger:
-            if content:
-                self.ros_logger.info(f"{title}: {content}")
-            else:
-                self.ros_logger.info(title)
+        if self.ros_logger is not None:
+            self.ros_logger.get_logger().info(f"[{self.solver_name}] {message}")
         else:
-            if content:
-                self.logger.info(f"{title}: {content}")
-            else:
-                self.logger.info(title)
+            self.logger.info(message)
     
-    def _log_warning(self, title: str, content: str = ""):
+    def _log_warning(self, message: str):
         """警告级别日志"""
-        if self.enable_ros_logging and self.ros_logger:
-            if content:
-                self.ros_logger.warning(f"{title}: {content}")
-            else:
-                self.ros_logger.warning(title)
+        if self.ros_logger is not None:
+            self.ros_logger.get_logger().warn(f"[{self.solver_name}] {message}")
         else:
-            if content:
-                self.logger.warning(f"{title}: {content}")
-            else:
-                self.logger.warning(title)
+            self.logger.warning(message)
+    
+    def _log_error(self, message: str):
+        """错误级别日志"""
+        if self.ros_logger is not None:
+            self.ros_logger.get_logger().error(f"[{self.solver_name}] {message}")
+        else:
+            self.logger.error(message)
     
     def _log_array_detailed(self, name: str, arr):
         """详细结构化输出数组的每个元素"""
@@ -152,7 +133,7 @@ class Case1BatchSolver:
         # 处理列表类型：直接打印列表信息，不转换
         if isinstance(arr, list):
             if len(arr) == 0:
-                self._log_debug(name, "空列表")
+                self._log_debug(f"{name}: 空列表")
                 return
             
             info = f"列表长度{len(arr)}"
@@ -168,14 +149,14 @@ class Case1BatchSolver:
                 sample_types = [type(item).__name__ for item in arr[:3]]
                 info += f", 前3个元素类型{sample_types}"
                 for item in arr:
-                    self._log_debug(name, f"{item}")
+                    self._log_debug(f"{name}: {item}")
             
-            self._log_debug(name, info)
+            self._log_debug(f"{name}: {info}")
             return
         
         # 处理numpy数组：原有逻辑
         if arr.size == 0:
-            self._log_debug(name, "空数组")
+            self._log_debug(f"{name}: 空数组")
             return
         
         # 基本信息：形状和类型
@@ -192,8 +173,8 @@ class Case1BatchSolver:
         # 内容预览（可选）
         if show_content and arr.size <= 10:
             for item in arr.flat:
-                self._log_debug(name, f"{item}")
-        self._log_debug(name, info)
+                self._log_debug(f"{name}: {item}")
+        self._log_debug(f"{name}: {info}")
     
     def solve(self, combinations: np.ndarray) -> np.ndarray:
         """
@@ -314,7 +295,7 @@ class Case1BatchSolver:
                 # 记录原始组合编号
                 combo_indices[expanded_idx] = combo_idx
         
-        self._log_debug("组合扩展完成", f"{N_cbn} -> {len(expanded)}个扩展组合，原始编号已追踪")
+        #self._log_debug("组合扩展完成", f"{N_cbn} -> {len(expanded)}个扩展组合，原始编号已追踪")
         return expanded, combo_indices
     
     def _compute_ab_coefficients(self, expanded_combinations: np.ndarray) -> tuple:
@@ -351,7 +332,7 @@ class Case1BatchSolver:
         B_vertical = t_vals[:, 0] * cos_theta[:, 0] - t_vals[:, 1] * cos_theta[:, 1]
         ab_v = np.column_stack([A_vertical, B_vertical])  # (3*N_cbn, 2)
         
-        self._log_debug("A、B系数计算完成", f"水平边{ab_h.shape}, 竖直边{ab_v.shape}")
+        #self._log_debug("A、B系数计算完成", f"水平边{ab_h.shape}, 竖直边{ab_v.shape}")
         return ab_h, ab_v
     
     def _compute_phi_candidates(self, ab_h: np.ndarray, ab_v: np.ndarray) -> tuple:
@@ -446,7 +427,7 @@ class Case1BatchSolver:
         
         valid_count_h = np.sum(valid_mask_h)
         valid_count_v = np.sum(valid_mask_v)
-        self._log_debug("phi候选生成完成", f"水平边{valid_count_h}个, 竖直边{valid_count_v}个有效值")
+        #self._log_debug("phi候选生成完成", f"水平边{valid_count_h}个, 竖直边{valid_count_v}个有效值")
         return phi_h, phi_v, valid_mask_h, valid_mask_v
     
     def _compute_collision_triangles_h(self, phi_h: np.ndarray, valid_mask_h: np.ndarray,
@@ -507,7 +488,7 @@ class Case1BatchSolver:
             colli_h[valid_indices, :, 1] = y_coords
         
         valid_count = np.sum(valid_mask_h)
-        self._log_debug("水平边碰撞三角形计算完成", f"{valid_count}个有效三角形，规则化存储")
+        #self._log_debug("水平边碰撞三角形计算完成", f"{valid_count}个有效三角形，规则化存储")
         return colli_h, combo_indices_h
     
     def _compute_collision_triangles_v(self, phi_v: np.ndarray, valid_mask_v: np.ndarray,
@@ -1228,7 +1209,7 @@ class Case1BatchSolver:
             np.ndarray: 解数组 (N_valid, 5)
         """
         N_valid = len(colli)
-        self._log_debug("水平边批量求解开始", f"处理{N_valid}个有效项")
+        #self._log_debug("水平边批量求解开始", f"处理{N_valid}个有效项")
         
         # 提取关键量
         t1_h = key[:, 0]  # (N_valid,)
@@ -1274,7 +1255,7 @@ class Case1BatchSolver:
         
         # 边界情况处理
         boundary_indices = np.where(boundary_mask & (~invalid_mask))[0]
-        self._log_debug("水平边边界情况", f"处理{len(boundary_indices)}个边界项，索引={boundary_indices}")
+        #self._log_debug("水平边边界情况", f"处理{len(boundary_indices)}个边界项，索引={boundary_indices}")
         
         if len(boundary_indices) > 0:
             y_center = (self.n - (yp1[boundary_indices] + yp0[boundary_indices])/2 - yp2[boundary_indices]) / 2
@@ -1297,7 +1278,7 @@ class Case1BatchSolver:
         
         # 普通情况处理
         normal_indices = np.where(same_sign_mask & (~boundary_mask) & (~invalid_mask))[0]
-        self._log_debug("水平边普通情况", f"处理{len(normal_indices)}个普通项，索引={normal_indices}")
+        #self._log_debug("水平边普通情况", f"处理{len(normal_indices)}个普通项，索引={normal_indices}")
         
         if len(normal_indices) > 0:
             # 计算x_center
@@ -1320,7 +1301,7 @@ class Case1BatchSolver:
             self._log_array_detailed("水平边center有效掩码", valid_center_mask)
             
             final_indices = normal_indices[valid_center_mask]
-            self._log_debug("水平边最终有效项", f"数量={len(final_indices)}, 索引={final_indices}")
+            #self._log_debug("水平边最终有效项", f"数量={len(final_indices)}, 索引={final_indices}")
             
             if len(final_indices) > 0:
                 valid_x_center = x_center[valid_center_mask]
@@ -1334,7 +1315,7 @@ class Case1BatchSolver:
         
         # 输出最终解的详细信息
         valid_sol_count = np.sum(~np.isinf(sol[:, 0]))
-        self._log_debug("水平边求解完成", f"得到{valid_sol_count}个有效解")
+        ##self._log_debug("水平边求解完成", f"得到{valid_sol_count}个有效解")
         
         # 计算所有合法解的掩码——通过中间量掩码计算
         final_mask = boundary_mask & (~invalid_mask) | same_sign_mask & (~boundary_mask) & (~invalid_mask)

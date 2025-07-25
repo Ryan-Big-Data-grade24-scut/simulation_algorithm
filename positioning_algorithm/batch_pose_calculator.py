@@ -24,7 +24,7 @@ class PoseSolver:
                  laser_config: List,
                  tol: float = 1e-3,
                  config: Optional[SolverConfig] = None,
-                 Rcl_logger:ros_logger = None):
+                 Rcl_logger = None):
         """
         初始化位姿求解器
         
@@ -34,49 +34,61 @@ class PoseSolver:
             laser_config: 激光配置列表 [((rel_r, rel_angle), laser_angle), ...]
             tol: 数值容差
             config: 求解器配置
-            ros_logger: ROS日志器（可选）
+            Rcl_logger: ROS节点的Logger对象（可选）
         """
         self.m = m
         self.n = n
         self.laser_config = laser_config
         self.tol = tol
         self.config = config or SolverConfig(tolerance=tol)
-        self.ros_logger:ros_logger = Rcl_logger
+        self.ros_logger = Rcl_logger
+        self.solver_name = "PoseSolver"
         
         # 初始化日志
-        if self.ros_logger:
-            """
-            Args:
-            logger_name: 日志器名称(如"solver.case1")
-            log_dir: 日志子目录(如"batches")
-            level: 日志级别(rclpy.logging.LoggingSeverity)
-            由于我们不可能在这里导入rclpy
-            所以使用int代替日志级别
-                分别是
-            rclpy.logging.LoggingSeverity.DEBUG = 10
-            rclpy.logging.LoggingSeverity.INFO = 20
-            rclpy.logging.LoggingSeverity.WARN = 30
-            rclpy.logging.LoggingSeverity.ERROR = 40
-            rclpy.logging.LoggingSeverity.FATAL = 50
-            不过，我们ros_logger在创建时已设置默认级别
-            """
-            self.logger = self.ros_logger.get_logger("PoseSolver", "batches")
-        else: 
+        if self.ros_logger is None:
             self._setup_logging()
         
         # 预计算激光参数（只计算一次）
         self.laser_params = self._precompute_laser_params()
         
         # 导入批处理求解器
-        from .batch_solvers import trig_cache, Case1BatchSolver, Case3BatchSolver
-        self.trig_cache = trig_cache
+        from .batch_solvers import Case1BatchSolver, Case3BatchSolver
         
-        # 创建求解器时传递日志参数
+        # 创建求解器时传递ROS logger
         self.case1_solver = Case1BatchSolver(m, n, self.config.tolerance, 
                                            ros_logger=self.ros_logger)
         self.case3_solver = Case3BatchSolver(m, n, self.config.tolerance, ros_logger=self.ros_logger)
         
-        self.logger.info(f"PoseSolver初始化完成: 场地({m}x{n}), {len(laser_config)}个激光")
+        self._log_info(f"PoseSolver初始化完成: 场地({m}x{n}), {len(laser_config)}个激光")
+    
+    # ==================== 统一日志封装函数 ====================
+    def _log_debug(self, message: str):
+        """调试级别日志"""
+        if self.ros_logger is not None:
+            self.ros_logger.get_logger().debug(f"[{self.solver_name}] {message}")
+        else:
+            self.logger.debug(message)
+    
+    def _log_info(self, message: str):
+        """信息级别日志"""
+        if self.ros_logger is not None:
+            self.ros_logger.get_logger().info(f"[{self.solver_name}] {message}")
+        else:
+            self.logger.info(message)
+    
+    def _log_warning(self, message: str):
+        """警告级别日志"""
+        if self.ros_logger is not None:
+            self.ros_logger.get_logger().warn(f"[{self.solver_name}] {message}")
+        else:
+            self.logger.warning(message)
+    
+    def _log_error(self, message: str):
+        """错误级别日志"""
+        if self.ros_logger is not None:
+            self.ros_logger.get_logger().error(f"[{self.solver_name}] {message}")
+        else:
+            self.logger.error(message)
     
     def _setup_logging(self):
         """设置日志系统"""
@@ -107,7 +119,7 @@ class PoseSolver:
             params.append([rel_r, rel_angle, laser_angle])
         
         laser_params = np.array(params)
-        self.logger.debug(f"预计算激光参数完成: {laser_params.shape}")
+        self._log_debug(f"预计算激光参数完成: {laser_params.shape}")
         return laser_params
     
     def solve(self, distances: np.ndarray) -> List[Tuple]:
@@ -120,6 +132,8 @@ class PoseSolver:
         Returns:
             解列表 [((x_min, x_max), (y_min, y_max), phi), ...]
         """
+        if len(distances) < 3:
+            return []  # 至少需要3个激光距离才能进行求解
         # 验证输入
         if len(distances) != len(self.laser_config):
             raise ValueError(f"距离数组长度({len(distances)})与激光配置数量({len(self.laser_config)})不匹配")
@@ -183,7 +197,7 @@ class PoseSolver:
         """计算碰撞向量参数"""
         valid_sum = np.sum(valid_mask)
         if valid_sum == 0:
-            self.logger.warning("没有有效的激光距离，返回空数组")
+            self._log_warning("没有有效的激光距离，返回空数组")
             return np.array([]).reshape(0, 2)
         valid_indice = np.where(valid_mask)[0]
         collision_params = np.zeros((valid_sum, 2), dtype=np.float64)
@@ -229,7 +243,7 @@ class PoseSolver:
     def _generate_combinations(self, collision_params: np.ndarray) -> np.ndarray:
         """生成三激光组合"""
         if len(collision_params) < 3:
-            self.logger.warning(f"激光数量不足({len(collision_params)})，无法生成三激光组合")
+            self._log_warning(f"激光数量不足({len(collision_params)})，无法生成三激光组合")
             return np.array([]).reshape(0, 3, 2)
         
         combos = []
@@ -282,7 +296,7 @@ class PoseSolver:
         # 统计归一化信息
         total_valid = np.sum(valid_mask)
         if total_valid > 0:
-            self.logger.debug(f"角度归一化完成: 处理了{total_valid}个有效解的phi角度")
+            self._log_debug(f"角度归一化完成: 处理了{total_valid}个有效解的phi角度")
 
     # 筛选器：处理解的相容性融合
     def filter_solutions(self, solutions: np.ndarray, valid_mask: np.ndarray) -> List[Tuple]:
@@ -321,7 +335,7 @@ class PoseSolver:
             
             # 输出当前组合的有效解信息
             valid_count = np.sum(current_valid)
-            self.logger.info(f"第{i}个组合有{valid_count}个有效解")
+            self._log_info(f"第{i}个组合有{valid_count}个有效解")
             # self._log_array_detailed(f"current_valid", current_valid)
             # self._log_array_detailed(f"current_solutions", current_solutions)
             
@@ -447,7 +461,7 @@ class PoseSolver:
                 # self.logger.info(f"第{i}个组合的所有解都已融合，无独立解")
             
             # 输出处理完第i个组合后的完整筛选结果
-            self.logger.info(f"处理完第{i}个组合后的筛选结果:")
+            self._log_info(f"处理完第{i}个组合后的筛选结果:")
             current_filtered = filtered_solutions[:filtered_count]
             # self._log_array_detailed(f"filtered_solutions[:{filtered_count}]", current_filtered)
         
@@ -465,22 +479,22 @@ class PoseSolver:
         sort_indices = np.argsort(final_filtered[:, 5])[::-1]
         final_filtered = final_filtered[sort_indices]
         
-        self.logger.info(f"排序后的最终筛选结果:")
+        self._log_info(f"排序后的最终筛选结果:")
         # self._log_array_detailed(f"final_filtered (sorted)", final_filtered)
 
         # 如果最高相容组合数等于组合数N 则返回相容组合数等于N的解
         max_compatible_count = final_filtered[0, 5]
-        # self.logger.info(f"最高相容组合数: {max_compatible_count}, 总组合数: {N}")
+        # self._log_info(f"最高相容组合数: {max_compatible_count}, 总组合数: {N}")
         
         if max_compatible_count == N:
             perfect_solutions = final_filtered[final_filtered[:, 5] == N, :5]
-            self.logger.info(f"找到{len(perfect_solutions)}个完美相容解 (相容数=N)")
+            self._log_info(f"找到{len(perfect_solutions)}个完美相容解 (相容数=N)")
             # self._log_array_detailed(f"perfect_solutions", perfect_solutions)
             return perfect_solutions
 
         # 否则返回前4个解
         top_solutions = final_filtered[:4, :5]
-        self.logger.info(f"返回前4个最佳解:")
+        self._log_info(f"返回前4个最佳解:")
         # self._log_array_detailed(f"top_solutions", top_solutions)
         return top_solutions
     
@@ -496,7 +510,7 @@ class PoseSolver:
         Returns:
             筛选后的解列表
         """
-        self.logger.info(f"开始筛选解: {solutions}, 有效掩码: {valid_mask}")
+        self._log_info(f"开始筛选解: {solutions}, 有效掩码: {valid_mask}")
         
         # 将解数组展平为 (N*36, 5)
         flat_solutions = solutions.reshape(-1, 5)
@@ -505,7 +519,7 @@ class PoseSolver:
         # 筛选有效解
         filtered_solutions = flat_solutions[flat_mask]
         
-        self.logger.info(f"筛选完成，共找到 {flat_solutions} 个有效解， 遍历所有元素{filtered_solutions}")
+        self._log_info(f"筛选完成，共找到 {flat_solutions} 个有效解， 遍历所有元素{filtered_solutions}")
         return filtered_solutions
 
         

@@ -6,13 +6,11 @@ import numpy as np
 import os
 from typing import List, Tuple
 import logging
-from .trig_cache import trig_cache
 
 class Case3BatchSolver:
     """Case3批处理求解器类"""
     
-    def __init__(self, m: float, n: float, tolerance: float = 1e-3, 
-                 enable_ros_logging: bool = False, ros_logger=None):
+    def __init__(self, m: float, n: float, tolerance: float = 1e-3, ros_logger=None):
         """
         初始化Case3求解器
         
@@ -20,24 +18,19 @@ class Case3BatchSolver:
             m: 场地宽度
             n: 场地高度  
             tolerance: 数值容差
-            enable_ros_logging: 是否启用ROS日志
-            ros_logger: ROS日志器对象
+            ros_logger: ROS节点的Logger对象（可选）
         """
         self.m = m
         self.n = n
         self.tolerance = tolerance
-        self.enable_ros_logging = enable_ros_logging
         self.ros_logger = ros_logger
+        self.solver_name = "Case3BatchSolver"
 
-        if self.ros_logger:
-            # 如果启用ROS日志，我们就创建一个handler
-            self.logger = self.ros_logger.get_logger("solver.case3", "batches/case3")
-        else:
-            # 设置日志系统
+        # 初始化日志
+        if self.ros_logger is None:
             self._setup_logging()
         
-        self._log_info("Case3BatchSolver初始化完成", 
-                      f"场地尺寸: {m}x{n}, 容差: {tolerance}")
+        self._log_info(f"Case3BatchSolver初始化完成: 场地尺寸: {m}x{n}, 容差: {tolerance}")
     
     def _setup_logging(self):
         """设置兼容ROS和Windows的日志系统"""
@@ -52,56 +45,41 @@ class Case3BatchSolver:
             if isinstance(handler, logging.FileHandler):
                 handler.close()
                 self.logger.removeHandler(handler)
-                
-        self.enable_ros_logging = False
-        # 根据ROS状态设置日志等级 
-        self.min_log_level = logging.DEBUG    # Windows调试模式下输出详细日志
-        
-        # 添加文件日志器（Windows调试用）
-        if not self.enable_ros_logging:
-            handler = logging.FileHandler("logs/case3_batch_solver.log", encoding="utf-8")
-            formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
-        
-        self.logger.setLevel(self.min_log_level)
+
+        # 添加文件日志器
+        handler = logging.FileHandler("logs/case3_batch_solver.log", encoding="utf-8")
+        formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
+        self.logger.setLevel(logging.DEBUG)
     
-    def _log_debug(self, title: str, content: str = ""):
+    def _log_debug(self, message: str):
         """调试级别日志"""
-        if self.enable_ros_logging and self.ros_logger:
-            # ROS模式下不输出调试信息
-            pass
+        if self.ros_logger is not None:
+            self.ros_logger.get_logger().debug(f"[{self.solver_name}] {message}")
         else:
-            if content:
-                self.logger.debug(f"{title}: {content}")
-            else:
-                self.logger.debug(title)
+            self.logger.debug(message)
     
-    def _log_info(self, title: str, content: str = ""):
+    def _log_info(self, message: str):
         """信息级别日志"""
-        if self.enable_ros_logging and self.ros_logger:
-            if content:
-                self.ros_logger.info(f"{title}: {content}")
-            else:
-                self.ros_logger.info(title)
+        if self.ros_logger is not None:
+            self.ros_logger.get_logger().info(f"[{self.solver_name}] {message}")
         else:
-            if content:
-                self.logger.info(f"{title}: {content}")
-            else:
-                self.logger.info(title)
+            self.logger.info(message)
     
-    def _log_warning(self, title: str, content: str = ""):
+    def _log_warning(self, message: str):
         """警告级别日志"""
-        if self.enable_ros_logging and self.ros_logger:
-            if content:
-                self.ros_logger.warning(f"{title}: {content}")
-            else:
-                self.ros_logger.warning(title)
+        if self.ros_logger is not None:
+            self.ros_logger.get_logger().warn(f"[{self.solver_name}] {message}")
         else:
-            if content:
-                self.logger.warning(f"{title}: {content}")
-            else:
-                self.logger.warning(title)
+            self.logger.warning(message)
+    
+    def _log_error(self, message: str):
+        """错误级别日志"""
+        if self.ros_logger is not None:
+            self.ros_logger.get_logger().error(f"[{self.solver_name}] {message}")
+        else:
+            self.logger.error(message)
     
     def _log_layer_summary(self, layer_name: str, data_dict: dict):
         """输出每一层的详细数组内容"""
@@ -204,7 +182,7 @@ class Case3BatchSolver:
         # 处理列表类型：直接打印列表信息，不转换
         if isinstance(arr, list):
             if len(arr) == 0:
-                self._log_debug(name, "空列表")
+                self._log_debug(f"{name}: 空列表")
                 return
             
             info = f"列表长度{len(arr)}"
@@ -220,12 +198,12 @@ class Case3BatchSolver:
                 sample_types = [type(item).__name__ for item in arr[:3]]
                 info += f", 前3个元素类型{sample_types}"
             
-            self._log_debug(name, info)
+            self._log_debug(f"{name}: {info}")
             return
         
         # 处理numpy数组：原有逻辑
         if arr.size == 0:
-            self._log_debug(name, "空数组")
+            self._log_debug(f"{name}: 空数组")
             return
         
         # 基本信息：形状和类型
@@ -239,7 +217,7 @@ class Case3BatchSolver:
                 valid_count = np.sum(np.isfinite(arr))
                 info += f", 有效值{valid_count}/{arr.size}"
         
-        self._log_debug(name, info)
+        self._log_debug(f"{name}: {info}")
     
     def solve(self, combinations: np.ndarray) -> List[Tuple]:
         """
@@ -601,8 +579,7 @@ class Case3BatchSolver:
             key_v[valid_mask] = valid_key
         
         valid_count = np.sum(valid_phi_flat_v)
-        self._log_debug("第六-七层竖直完成", 
-                       f"生成{N_flat}个位置，有效{valid_count}个")
+        self._log_debug(f"第六-七层竖直完成: 生成{N_flat}个位置，有效{valid_count}个")
         return colli_v, key_v, valid_phi_flat_v
         
     # ==================== 第八层：求解 12N->12N ====================
@@ -711,8 +688,7 @@ class Case3BatchSolver:
                     valid_sol_h[final_solve_indices] = True
         
         valid_count = np.sum(valid_sol_h)
-        self._log_debug("第八层水平完成", 
-                       f"从{N_flat}个位置中求得{valid_count}个有效解")
+        #self._log_debug("第八层水平完成", f"从{N_flat}个位置中求得{valid_count}个有效解")
         
         return sols_h, valid_sol_h
     
@@ -821,8 +797,7 @@ class Case3BatchSolver:
                     valid_sol_v[final_solve_indices] = True
         
         valid_count = np.sum(valid_sol_v)
-        self._log_debug("第八层竖直完成", 
-                       f"从{N_flat}个位置中求得{valid_count}个有效解")
+        #self._log_debug("第八层竖直完成", f"从{N_flat}个位置中求得{valid_count}个有效解")
         return sols_v, valid_sol_v
         
     # ==================== 第九层：合并解 12N+12N->24N ====================
@@ -856,8 +831,7 @@ class Case3BatchSolver:
         valid_v_count = np.sum(valid_sol_v)
         total_valid = np.sum(final_valid)
         
-        self._log_debug("第九层完成", 
-                       f"合并: 水平{valid_h_count}个 + 竖直{valid_v_count}个 = 总计{total_valid}个有效解")
+        #self._log_debug("第九层完成", f"合并: 水平{valid_h_count}个 + 竖直{valid_v_count}个 = 总计{total_valid}个有效解")
         
         return final_sol, final_valid
     
