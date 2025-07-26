@@ -84,8 +84,6 @@ class PoseSolver(BaseLog):
         Returns:
             解列表 [((x_min, x_max), (y_min, y_max), phi), ...]
         """
-        if len(distances) < 3:
-            return []  # 至少需要3个激光距离才能进行求解
         # 验证输入
         if len(distances) != len(self.laser_config):
             raise ValueError(f"距离数组长度({len(distances)})与激光配置数量({len(self.laser_config)})不匹配")
@@ -98,9 +96,16 @@ class PoseSolver(BaseLog):
         所以我们要添加掩码，在计算碰撞向量参数的时候，就把这些坏掉的激光头给删了
         """
 
-        # 0.5 可用激光——掩码：可用为1 不可用为0
-        valid_mask = distances > 0.5  # 可用激光的掩码
-        
+        # self.tol 可用激光——掩码：可用为1 不可用为0
+        # 最大值为矩形对角线长度 矩形长宽为 m, n
+        # 暂存对角线长度
+        vtc = np.sqrt(self.m**2 + self.n**2)
+        # 计算有效激光距离掩码
+        valid_mask = (distances > self.tol) & (distances < vtc)  # 可用激光的掩码
+        # 有效激光束小于三
+        if np.sum(valid_mask) < 3:
+            return []  # 至少需要3个激光束才能进行求解
+
         # 1. 计算碰撞向量参数
         collision_params = self._calculate_collision_vectors(distances, valid_mask)
         
