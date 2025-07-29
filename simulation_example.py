@@ -12,12 +12,9 @@ for f in glob.glob(os.path.join(log_dir, '*')):
     if os.path.isfile(f):
         os.remove(f)
 
-# 四束激光测试：
+# 5束激光测试——均匀72°分布：
 lsr_cfg = [
-    ((0.5, 0), 0),                      # 0°
-    ((0.5, np.pi/2), np.pi/2),          # 90°
-    ((0.5, np.pi), np.pi),              # 180°
-    ((0.5, -np.pi/2), -np.pi/2)       # 270°
+    ((0, np.pi / 180*72 * i), np.pi /180*72 * i) for i in range(5)
 ]
 
 # 你可以根据实际环境决定是否启用ROS日志

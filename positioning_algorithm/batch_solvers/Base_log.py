@@ -3,6 +3,16 @@ import logging
 import numpy as np
 
 class BaseLog(ABC):
+    """
+    统一日志基类
+    提供详细的结构化日志输出功能，支持ROS和Python标准日志
+    """
+    
+    def __init__(self):
+        """初始化日志控制参数"""
+        self.enable_detailed_logging = True  # 控制是否启用详细日志
+        self.max_array_elements = 500        # 详细日志中数组元素的最大显示数量（增加显示数量）
+    
     # ==================== 统一日志封装函数 ====================
     def _log_debug(self, message: str):
         """调试级别日志"""
@@ -55,51 +65,70 @@ class BaseLog(ABC):
         self.logger.setLevel(logging.DEBUG)  # 设置为DEBUG级别以显示详细数组日志
 
     def _log_array_detailed(self, name: str, arr):
-        """详细结构化输出数组的每个元素"""
-        # 性能优化：注释掉所有详细日志输出
-        pass
-        # if isinstance(arr, list):
-        #     if len(arr) == 0:
-        #         self._log_debug(name, "空列表")
-        #         return
-        #     
-        #     self._log_debug(f"{name} 详细内容", f"列表长度: {len(arr)}")
-        #     for i, item in enumerate(arr):
-        #         self._log_debug(f"{name}[{i}]", f"{item}")
-        # 
-        # elif isinstance(arr, np.ndarray):
-        #     if arr.size == 0:
-        #         self._log_debug(name, "空数组")
-        #         return
-        #     
-        #     self._log_debug(f"{name} 详细内容", f"形状: {arr.shape}, 类型: {arr.dtype.name}")
-        #     
-        #     if arr.ndim == 1:
-        #         # 一维数组：逐个显示
-        #         for i in range(len(arr)):
-        #             self._log_debug(f"{name}[{i}]", f"{arr[i]}")
-        #     
-        #     elif arr.ndim == 2:
-        #         # 二维数组：按行显示
-        #         for i in range(arr.shape[0]):
-        #             self._log_debug(f"{name}[{i}]", f"{arr[i]}")
-        #     
-        #     elif arr.ndim == 3:
-        #         # 三维数组：分层显示
-        #         for i in range(arr.shape[0]):
-        #             self._log_debug(f"{name}[{i}] 形状{arr[i].shape}", "")
-        #             for j in range(arr.shape[1]):
-        #                 self._log_debug(f"  {name}[{i}][{j}]", f"{arr[i][j]}")
-        #     
-        #     else:
-        #         # 更高维数组：显示基本信息和前几个元素
-        #         self._log_debug(f"{name}", f"高维数组 {arr.shape}，显示前5个元素:")
-        #         flat_arr = arr.flatten()
-        #         for i in range(min(5, len(flat_arr))):
-        #             self._log_debug(f"{name}.flat[{i}]", f"{flat_arr[i]}")
-        # 
-        # else:
-        #     self._log_debug(name, f"类型: {type(arr)}, 内容: {arr}")
+        """详细结构化输出数组的每个元素 - 始终显示详细内容"""
+        # 既然调用了detailed函数，就应该显示详细内容，不受enable_detailed_logging限制
+            
+        if isinstance(arr, list):
+            if len(arr) == 0:
+                self._log_debug(f"{name}: 空列表")
+                return
+            
+            self._log_debug(f"{name} 详细内容: 列表长度: {len(arr)}")
+            # 限制输出的元素数量
+            max_elements = min(len(arr), self.max_array_elements)
+            for i in range(max_elements):
+                self._log_debug(f"{name}[{i}]: {arr[i]}")
+            if len(arr) > max_elements:
+                self._log_debug(f"{name}: ... (还有{len(arr) - max_elements}个元素未显示)")
+        
+        elif isinstance(arr, np.ndarray):
+            if arr.size == 0:
+                self._log_debug(f"{name}: 空数组")
+                return
+            
+            self._log_debug(f"{name} 详细内容: 形状: {arr.shape}, 类型: {arr.dtype.name}")
+            
+            if arr.ndim == 1:
+                # 一维数组：限制显示元素数量
+                max_elements = min(len(arr), self.max_array_elements)
+                for i in range(max_elements):
+                    self._log_debug(f"{name}[{i}]: {arr[i]}")
+                if len(arr) > max_elements:
+                    self._log_debug(f"{name}: ... (还有{len(arr) - max_elements}个元素未显示)")
+            
+            elif arr.ndim == 2:
+                # 二维数组：限制显示行数
+                max_rows = min(arr.shape[0], self.max_array_elements)
+                for i in range(max_rows):
+                    self._log_debug(f"{name}[{i}]: {arr[i]}")
+                if arr.shape[0] > max_rows:
+                    self._log_debug(f"{name}: ... (还有{arr.shape[0] - max_rows}行未显示)")
+            
+            elif arr.ndim == 3:
+                # 三维数组：分层显示，显示更多层和每层更多行
+                max_layers = min(arr.shape[0], 100)  # 最多显示100层
+                for i in range(max_layers):
+                    self._log_debug(f"{name}[{i}] 形状{arr[i].shape}:")
+                    max_rows = min(arr.shape[1], 200)  # 每层最多显示200行
+                    for j in range(max_rows):
+                        self._log_debug(f"  {name}[{i}][{j}]: {arr[i][j]}")
+                    if arr.shape[1] > max_rows:
+                        self._log_debug(f"  ... (还有{arr.shape[1] - max_rows}行未显示)")
+                if arr.shape[0] > max_layers:
+                    self._log_debug(f"{name}: ... (还有{arr.shape[0] - max_layers}层未显示)")
+            
+            else:
+                # 更高维数组：显示基本信息和前几个元素
+                self._log_debug(f"{name}: 高维数组 {arr.shape}，显示前{self.max_array_elements}个元素:")
+                flat_arr = arr.flatten()
+                max_elements = min(self.max_array_elements, len(flat_arr))
+                for i in range(max_elements):
+                    self._log_debug(f"{name}.flat[{i}]: {flat_arr[i]}")
+                if len(flat_arr) > max_elements:
+                    self._log_debug(f"{name}: ... (还有{len(flat_arr) - max_elements}个元素未显示)")
+        
+        else:
+            self._log_debug(f"{name}: 类型: {type(arr)}, 内容: {arr}")
 
     def _log_array(self, name: str, arr, show_content: bool = True):
         """简单的数组/列表日志打印函数"""

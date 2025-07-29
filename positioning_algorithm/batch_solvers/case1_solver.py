@@ -21,6 +21,9 @@ class Case1BatchSolver(BaseLog):
             tolerance: 数值容差
             ros_logger: ROS节点的Logger对象（可选）
         """
+        # 初始化基类
+        super().__init__()
+        
         self.m = m
         self.n = n
         self.tolerance = tolerance
@@ -30,8 +33,6 @@ class Case1BatchSolver(BaseLog):
         # 初始化日志
         if self.ros_logger is None:
             self._setup_logging(self.solver_name)
-
-        self._log_info(f"Case1BatchSolver初始化完成: 场地尺寸: {m}x{n}, 容差: {tolerance}")
     
     def solve(self, combinations: np.ndarray) -> np.ndarray:
         """
@@ -49,75 +50,35 @@ class Case1BatchSolver(BaseLog):
         # self._log_info("=" * 60)
         
         # 输入验证和日志
-        # self._log_array("输入组合数组", combinations, show_content=False)
-        # self._log_array_detailed("输入组合详细", combinations)
-        
         if len(combinations) == 0:
-            # self._log_warning("没有组合可求解")
             return np.array([]).reshape(0, 5)
         
         N = len(combinations)
-        # self._log_info(f"组合数量统计", f"总共{N}个激光组合需要处理")
         
         # 第一层: 扩展组合 (N -> 3N)
-        # self._log_debug("第一层: 开始组合扩展 N -> 3N")
         expanded, indices = self._expand_combinations(combinations)
-        # self._log_array_detailed("扩展后组合详细", expanded)
-        # self._log_array_detailed("组合索引追踪详细", indices)
         
         # 第二层: 计算phi
-        # 步骤1：计算A/B系数
-        # self._log_debug("第二层步骤1: 计算A、B系数")
         ab_h, ab_v = self._compute_ab_coefficients(expanded)
-        # self._log_array_detailed("水平边A、B系数详细", ab_h)
-        # self._log_array_detailed("竖直边A、B系数详细", ab_v)
-        
-        # 步骤2: 计算phi候选 (6N,)
-        # self._log_debug("第二层步骤2: 计算phi候选")
         phi_h, valid_h = self._compute_phi_candidates_regularized(ab_h)
         phi_v, valid_v = self._compute_phi_candidates_regularized(ab_v)
         
-        # self._log_array_detailed("水平边phi候选详细", phi_h)
-        # self._log_array_detailed("水平边有效掩码详细", valid_h)
-        # self._log_array_detailed("竖直边phi候选详细", phi_v)
-        # self._log_array_detailed("竖直边有效掩码详细", valid_v)
-        
         valid_count_h = np.sum(valid_h)
         valid_count_v = np.sum(valid_v)
-        # self._log_info("phi候选统计", f"水平边: {valid_count_h}/{6*N}个有效, 竖直边: {valid_count_v}/{6*N}个有效")
         
         # 第三层: 计算碰撞三角形和关键量
-        # self._log_debug("第三层: 计算碰撞三角形和关键量")
         colli_h, key_h = self._compute_collision_and_key_regularized(phi_h, valid_h, expanded, "horizontal")
         colli_v, key_v = self._compute_collision_and_key_regularized(phi_v, valid_v, expanded, "vertical")
         
-        # self._log_array_detailed("水平边碰撞三角形详细", colli_h)
-        # self._log_array_detailed("水平边关键量详细", key_h)
-        # self._log_array_detailed("竖直边碰撞三角形详细", colli_v)
-        # self._log_array_detailed("竖直边关键量详细", key_v)
-        
         # 第四层: 批量求解
-        # self._log_debug("第四层: 批量求解")
         sol_h, valid_h = self._solve_batch_regularized(colli_h, key_h, phi_h, valid_h, "horizontal")
         sol_v, valid_v = self._solve_batch_regularized(colli_v, key_v, phi_v, valid_v, "vertical")
         
-        # self._log_array_detailed("水平边解详细", sol_h)
-        # self._log_array_detailed("竖直边解详细", sol_v)
-        # self._log_array_detailed("水平边有效掩码详细", valid_h)
-        # self._log_array_detailed("竖直边有效掩码详细", valid_v)
-        
         # 第五层：合并结果(12N, 5) -> (N, 12, 5)
-        # self._log_debug("第五层: 合并结果")
         final_sol, final_valid = self._merge_solutions_regularized(sol_h, sol_v, valid_h, valid_v, indices, N)
         
-        # self._log_array_detailed("最终解详细", final_sol)
-        # self._log_array_detailed("最终有效掩码详细", final_valid)
-        
         # 最终统计
-        valid_solutions = np.sum(~np.isinf(final_sol[:, 0]))
-        # self._log_info("=" * 60)
-        # self._log_info("Case1求解完成", f"在{N}个组合中找到{valid_solutions}个有效解")
-        # self._log_info("=" * 60)
+        valid_solutions = np.sum(~np.isinf(final_sol[:, :, 0]))
         
         return final_sol, final_valid
     
@@ -943,7 +904,7 @@ class Case1BatchSolver(BaseLog):
         
         # 初始化规则化数组
         colli = np.full((N_phi, 3, 2), np.inf, dtype=np.float64)
-        key = np.full((N_phi, 3), np.inf, dtype=np.float64)
+        key = np.full((N_phi, 5), np.inf, dtype=np.float64)
         
         # 批量计算有效的碰撞三角形
         valid_indices = np.where(valid_mask)[0]
@@ -952,13 +913,9 @@ class Case1BatchSolver(BaseLog):
         if len(valid_indices) > 0:
             # 计算对应的扩展组合索引
             exp_indices = valid_indices // 2
-            # self._log_debug(f"{case_type}扩展组合索引", f"exp_indices={exp_indices}")
-            
             # 获取有效的phi值和组合
             valid_phi = phi[valid_indices]
             valid_combinations = expanded[exp_indices]
-            # self._log_debug(f"{case_type}有效phi值详细", f"valid_phi={valid_phi}")
-            # self._log_array_detailed(f"{case_type}有效组合详细", valid_combinations)
             
             # 批量计算旋转变换
             t_values = valid_combinations[:, :, 0]  # (N_valid, 3)
@@ -986,12 +943,16 @@ class Case1BatchSolver(BaseLog):
                 t1 = y_coords[:, 2] - (y_coords[:, 1] + y_coords[:, 0]) / 2  # t1: yp2-(yp1+yp0)/2
                 t2 = x_coords[:, 2] - x_coords[:, 0]  # t2: xp2-xp0
                 t3 = x_coords[:, 2] - x_coords[:, 1]  # t3: xp2-xp1
+                t4 = y_coords[:, 2] - y_coords[:, 0]  # t4: yp2-yp0
+                t5 = y_coords[:, 2] - y_coords[:, 1]  # t5: yp2-yp1
                 # self._log_debug("水平边关键量计算公式", "t1=yp2-(yp1+yp0)/2, t2=xp2-xp0, t3=xp2-xp1")
             else:  # vertical
                 # 竖直边关键量计算
                 t1 = x_coords[:, 2] - (x_coords[:, 1] + x_coords[:, 0]) / 2  # t1: xp2-(xp1+xp0)/2
                 t2 = y_coords[:, 2] - y_coords[:, 0]  # t2: yp2-yp0
                 t3 = y_coords[:, 2] - y_coords[:, 1]  # t3: yp2-yp1
+                t4 = x_coords[:, 2] - x_coords[:, 0]  # t4: xp2-xp0
+                t5 = x_coords[:, 2] - x_coords[:, 1]  # t5: xp2-xp1
                 # self._log_debug("竖直边关键量计算公式", "t1=xp2-(xp1+xp0)/2, t2=yp2-yp0, t3=yp2-yp1")
             
             # self._log_array_detailed(f"{case_type}关键量t1详细", t1)
@@ -1001,7 +962,9 @@ class Case1BatchSolver(BaseLog):
             key[valid_indices, 0] = t1
             key[valid_indices, 1] = t2
             key[valid_indices, 2] = t3
-        
+            key[valid_indices, 3] = t4
+            key[valid_indices, 4] = t5
+
         valid_count = np.sum(valid_mask)
         # self._log_debug(f"{case_type}碰撞三角形和关键量计算完成", f"{valid_count}个有效项，规则化存储")
         return colli, key
@@ -1059,8 +1022,11 @@ class Case1BatchSolver(BaseLog):
         
         Args:
             colli: 有效碰撞三角形 (N_valid, 3, 2)
-            key: 有效关键量 (N_valid, 3)
+            key: 有效关键量 (N_valid, 5)
             phi: 有效phi值 (N_valid,)
+            t1公式： t1 = yp2 - (yp1 + yp0) / 2
+            t2公式： t2 = xp2 - xp0
+            t3公式： t3 = xp2 - xp1
             
         Returns:
             np.ndarray: 解数组 (N_valid, 5)
@@ -1072,10 +1038,12 @@ class Case1BatchSolver(BaseLog):
         t1_h = key[:, 0]  # (N_valid,)
         t2_h = key[:, 1]  # (N_valid,)
         t3_h = key[:, 2]  # (N_valid,)
+        t4_h = key[:, 3]  # (N_valid,)
+        t5_h = key[:, 4]  # (N_valid,)
         
-        self._log_array_detailed("水平边t1关键量", t1_h)
-        self._log_array_detailed("水平边t2关键量", t2_h)
-        self._log_array_detailed("水平边t3关键量", t3_h)
+        #self._log_array_detailed("水平边t1关键量", t1_h)
+        #self._log_array_detailed("水平边t2关键量", t2_h)
+        #self._log_array_detailed("水平边t3关键量", t3_h)
         
         # 提取坐标
         xp0 = colli[:, 0, 0]  # (N_valid,)
@@ -1084,13 +1052,13 @@ class Case1BatchSolver(BaseLog):
         yp1 = colli[:, 1, 1]  # (N_valid,)
         xp2 = colli[:, 2, 0]  # (N_valid,)
         yp2 = colli[:, 2, 1]  # (N_valid,)
-        
-        self._log_array_detailed("水平边xp0", xp0)
-        self._log_array_detailed("水平边yp0", yp0)
-        self._log_array_detailed("水平边xp1", xp1)
-        self._log_array_detailed("水平边yp1", yp1)
-        self._log_array_detailed("水平边xp2", xp2)
-        self._log_array_detailed("水平边yp2", yp2)
+
+        # self._log_array_detailed("水平边xp0", xp0)
+        #self._log_array_detailed("水平边yp0", yp0)
+        #self._log_array_detailed("水平边xp1", xp1)
+        #self._log_array_detailed("水平边yp1", yp1)
+        #self._log_array_detailed("水平边xp2", xp2)
+        #self._log_array_detailed("水平边yp2", yp2)
         
         # 筛选条件：abs(t1)>n+tol 或 abs(t2)>m+tol 或 abs(t3)>m+tol
         invalid_mask = ((np.abs(t1_h) > self.n + self.tolerance) |
@@ -1098,15 +1066,18 @@ class Case1BatchSolver(BaseLog):
                        (np.abs(t3_h) > self.m + self.tolerance))
         
         # 判断t1是否等于n或-n
-        boundary_mask = np.abs(np.abs(t1_h) - self.n) <= self.tolerance
-        
+        boundary_mask = (np.abs(np.abs(t1_h) - self.n) <= self.tolerance) 
+
+        # 另一种情况，之前忘记考虑：t4, t5也可能为0
+        same_side_mask = (np.abs(t4_h) <= self.tolerance) & (np.abs(t5_h) <= self.tolerance)
+
         # 判断t2, t3符号是否一致且都非零
         same_sign_mask = ((t2_h > 0) & (t3_h > 0)) | ((t2_h < 0) & (t3_h < 0))
         
-        self._log_array_detailed("水平边无效掩码", invalid_mask)
-        self._log_array_detailed("水平边边界掩码", boundary_mask)
-        self._log_array_detailed("水平边同符号掩码", same_sign_mask)
-        
+        #self._log_array_detailed("水平边无效掩码", invalid_mask)
+        #self._log_array_detailed("水平边边界掩码", boundary_mask)
+        #self._log_array_detailed("水平边同符号掩码", same_sign_mask)
+
         # 初始化解数组
         sol = np.full((N_valid, 5), np.inf, dtype=np.float64)
         
@@ -1122,19 +1093,56 @@ class Case1BatchSolver(BaseLog):
             x_min = 0 - np.minimum.reduce([xp0[boundary_indices], 
                                           xp1[boundary_indices], 
                                           xp2[boundary_indices]])
-            
-            self._log_array_detailed("水平边边界y_center", y_center)
-            self._log_array_detailed("水平边边界x_max", x_max)
-            self._log_array_detailed("水平边边界x_min", x_min)
-            
+
+            # self._log_array_detailed("水平边边界y_center", y_center)
+            # self._log_array_detailed("水平边边界x_max", x_max)
+            # self._log_array_detailed("水平边边界x_min", x_min)
+
             sol[boundary_indices, 0] = x_min - self.tolerance  # xmin
             sol[boundary_indices, 1] = x_max + self.tolerance  # xmax
             sol[boundary_indices, 2] = y_center - self.tolerance  # ymin
             sol[boundary_indices, 3] = y_center + self.tolerance  # ymax
             sol[boundary_indices, 4] = phi[boundary_indices]   # phi
-        
+
+        # 同边情况处理
+        if np.sum(same_side_mask) > 0:
+            # 这里有两种情况
+            # y0 y1 y2 同为负和 y0 y1 y2 同为正
+            positive_side_mask = same_side_mask & (yp0 >= -self.tolerance) & (yp1 >= -self.tolerance) & (yp2 >= -self.tolerance)
+            negative_side_mask = same_side_mask & (yp0 <= self.tolerance) & (yp1 <= self.tolerance) & (yp2 <= self.tolerance)
+            positive_indices = np.where(positive_side_mask&(~invalid_mask))
+            if len(positive_indices[0]) > 0:
+                # y = y - (y0 + y1 + y2) / 3
+                y_center_positive = (self.n - (yp0[positive_indices] + yp1[positive_indices] + yp2[positive_indices]) / 3)
+                x_max_positive = self.m - np.maximum.reduce([xp0[positive_indices], xp1[positive_indices], xp2[positive_indices]])
+                x_min_positive = 0 - np.minimum.reduce([xp0[positive_indices], xp1[positive_indices], xp2[positive_indices]])
+                y_max_positive = y_center_positive + self.tolerance
+                y_min_positive = y_center_positive - self.tolerance
+                sol[positive_indices, 0] = x_min_positive - self.tolerance  # xmin
+                sol[positive_indices, 1] = x_max_positive + self.tolerance  # xmax
+                sol[positive_indices, 2] = y_min_positive  # ymin
+                sol[positive_indices, 3] = y_max_positive  # ymax
+                sol[positive_indices, 4] = phi[positive_indices]  # phi
+            negative_indices = np.where(negative_side_mask&(~invalid_mask))
+            if len(negative_indices[0]) > 0:
+                # 负边界情况
+                # y0 y1 y2 同为负
+                # y = y + (y0 + y1 + y2) / 3
+                # self._log_debug("水平边同边情况", f"处理{len(negative_indices)}个负边界项，索引={negative_indices}")
+                # y = y + (y0 + y1 + y2) / 3
+                y_center_negative = -(yp0[negative_indices] + yp1[negative_indices] + yp2[negative_indices]) / 3
+                x_max_negative = self.m - np.maximum.reduce([xp0[negative_indices], xp1[negative_indices], xp2[negative_indices]])
+                x_min_negative = 0 - np.minimum.reduce([xp0[negative_indices], xp1[negative_indices], xp2[negative_indices]])
+                y_max_negative = y_center_negative + self.tolerance
+                y_min_negative = y_center_negative - self.tolerance
+                sol[negative_indices, 0] = x_min_negative - self.tolerance  # xmin
+                sol[negative_indices, 1] = x_max_negative + self.tolerance  # xmax
+                sol[negative_indices, 2] = y_min_negative  # ymin
+                sol[negative_indices, 3] = y_max_negative  # ymax
+                sol[negative_indices, 4] = phi[negative_indices]  # phi
+
         # 普通情况处理
-        normal_indices = np.where(same_sign_mask & (~boundary_mask) & (~invalid_mask))[0]
+        normal_indices = np.where(same_sign_mask & (~boundary_mask) & (~invalid_mask) & (~same_side_mask))[0]
         #self._log_debug("水平边普通情况", f"处理{len(normal_indices)}个普通项，索引={normal_indices}")
         
         if len(normal_indices) > 0:
@@ -1148,14 +1156,14 @@ class Case1BatchSolver(BaseLog):
                                -(yp0[normal_indices] + yp1[normal_indices]) / 2,
                                self.n - (yp0[normal_indices] + yp1[normal_indices]) / 2)
             
-            self._log_array_detailed("水平边普通x_center", x_center)
-            self._log_array_detailed("水平边普通y_center", y_center)
+            #self._log_array_detailed("水平边普通x_center", x_center)
+            #self._log_array_detailed("水平边普通y_center", y_center)
             
             # 检查center是否在矩形框内
             valid_center_mask = ((0 <= x_center) & (x_center <= self.m) & 
                                (0 <= y_center) & (y_center <= self.n))
             
-            self._log_array_detailed("水平边center有效掩码", valid_center_mask)
+            # self._log_array_detailed("水平边center有效掩码", valid_center_mask)
             
             final_indices = normal_indices[valid_center_mask]
             #self._log_debug("水平边最终有效项", f"数量={len(final_indices)}, 索引={final_indices}")
@@ -1176,7 +1184,7 @@ class Case1BatchSolver(BaseLog):
         
         # 计算所有合法解的掩码——通过中间量掩码计算
         final_mask = boundary_mask & (~invalid_mask) | same_sign_mask & (~boundary_mask) & (~invalid_mask)
-        self._log_array_detailed("水平边最终解掩码", final_mask)
+        #self._log_array_detailed("水平边最终解掩码", final_mask)
 
         return sol, final_mask
     
@@ -1199,6 +1207,8 @@ class Case1BatchSolver(BaseLog):
         t1_v = key[:, 0]  # (N_valid,)
         t2_v = key[:, 1]  # (N_valid,)
         t3_v = key[:, 2]  # (N_valid,)
+        t4_v = key[:, 3]  # (N_valid,)
+        t5_v = key[:, 4]  # (N_valid,)
         
         # 提取坐标
         xp0 = colli[:, 0, 0]  # (N_valid,)
@@ -1215,6 +1225,9 @@ class Case1BatchSolver(BaseLog):
         
         # 判断t1是否等于m或-m
         boundary_mask = np.abs(np.abs(t1_v) - self.m) <= self.tolerance
+
+        # 另一种情况，之前忘记考虑：t4, t5也可能为0
+        same_side_mask = (np.abs(t4_v) <= self.tolerance) & (np.abs(t5_v) <= self.tolerance)
         
         # 判断t2, t3符号是否一致且都非零
         same_sign_mask = ((t2_v > 0) & (t3_v > 0)) | ((t2_v < 0) & (t3_v < 0))
@@ -1225,7 +1238,7 @@ class Case1BatchSolver(BaseLog):
         # 边界情况处理
         boundary_indices = np.where(boundary_mask & (~invalid_mask))[0]
         if len(boundary_indices) > 0:
-            x_center = (self.m - (xp1[boundary_indices] + xp2[boundary_indices]) / 2 - xp0[boundary_indices]) / 2
+            x_center = (self.m - (xp0[boundary_indices] + xp1[boundary_indices]) / 2 - xp2[boundary_indices]) / 2
             y_max = self.n - np.maximum.reduce([yp0[boundary_indices], 
                                                yp1[boundary_indices], 
                                                yp2[boundary_indices]])
@@ -1239,8 +1252,41 @@ class Case1BatchSolver(BaseLog):
             sol[boundary_indices, 3] = y_max + self.tolerance     # ymax
             sol[boundary_indices, 4] = phi[boundary_indices]      # phi
         
+        # 同边情况处理
+        if np.sum(same_side_mask) > 0:
+            # 这里有两种情况
+            # x0 x1 x2 同为负和 x0 x1 x2 同为正
+            positive_side_mask = same_side_mask & (xp0 >= -self.tolerance) & (xp1 >= -self.tolerance) & (xp2 >= -self.tolerance)
+            negative_side_mask = same_side_mask & (xp0 <= self.tolerance) & (xp1 <= self.tolerance) & (xp2 <= self.tolerance)
+            positive_indices = np.where(positive_side_mask&(~invalid_mask))
+            if len(positive_indices[0]) > 0:
+                # x = x - (x0 + x1 + x2) / 3
+                x_center_positive = (self.m - (xp0[positive_indices] + xp1[positive_indices] + xp2[positive_indices]) / 3)
+                y_max_positive = self.n - np.maximum.reduce([yp0[positive_indices], yp1[positive_indices], yp2[positive_indices]])
+                y_min_positive = 0 - np.minimum.reduce([yp0[positive_indices], yp1[positive_indices], yp2[positive_indices]])
+                sol[positive_indices, 0] = x_center_positive - self.tolerance  # xmin
+                sol[positive_indices, 1] = x_center_positive + self.tolerance  # xmax
+                sol[positive_indices, 2] = y_min_positive - self.tolerance  # ymin
+                sol[positive_indices, 3] = y_max_positive + self.tolerance  # ymax
+                sol[positive_indices, 4] = phi[positive_indices]  # phi
+            negative_indices = np.where(negative_side_mask&(~invalid_mask))
+            if len(negative_indices[0]) > 0:
+                # 负边界情况
+                # x0 x1 x2 同为负
+                # x = x + (x0 + x1 + x2) / 3
+                # self._log_debug("竖直边同边情况", f"处理{len(negative_indices)}个负边界项，索引={negative_indices}")
+                # x = x + (x0 + x1 + x2) / 3
+                x_center_negative = -(xp0[negative_indices] + xp1[negative_indices] + xp2[negative_indices]) / 3
+                y_max_negative = self.n - np.maximum.reduce([yp0[negative_indices], yp1[negative_indices], yp2[negative_indices]])
+                y_min_negative = 0 - np.minimum.reduce([yp0[negative_indices], yp1[negative_indices], yp2[negative_indices]])
+                sol[negative_indices, 0] = x_center_negative - self.tolerance  # xmin
+                sol[negative_indices, 1] = x_center_negative + self.tolerance  # xmax
+                sol[negative_indices, 2] = y_min_negative - self.tolerance  # ymin
+                sol[negative_indices, 3] = y_max_negative + self.tolerance  # ymax
+                sol[negative_indices, 4] = phi[negative_indices]  # phi
+        
         # 普通情况处理
-        normal_indices = np.where(same_sign_mask & (~boundary_mask) & (~invalid_mask))[0]
+        normal_indices = np.where(same_sign_mask & (~boundary_mask) & (~invalid_mask) & (~same_side_mask))[0]
         if len(normal_indices) > 0:
             # 计算y_center
             y_center = np.where(t2_v[normal_indices] > 0, 

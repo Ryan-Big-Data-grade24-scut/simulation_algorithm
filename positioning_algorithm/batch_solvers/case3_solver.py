@@ -21,6 +21,9 @@ class Case3BatchSolver(BaseLog):
             tolerance: 数值容差
             ros_logger: ROS节点的Logger对象（可选）
         """
+        # 初始化基类
+        super().__init__()
+        
         self.m = m
         self.n = n
         self.tolerance = tolerance
@@ -30,8 +33,6 @@ class Case3BatchSolver(BaseLog):
         # 初始化日志
         if self.ros_logger is None:
             self._setup_logging(self.solver_name)
-        
-        self._log_info(f"Case3BatchSolver初始化完成: 场地尺寸: {m}x{n}, 容差: {tolerance}")
     
     def solve(self, combinations: np.ndarray) -> List[Tuple]:
         """
@@ -52,69 +53,31 @@ class Case3BatchSolver(BaseLog):
         
         # 输入验证和日志
         if len(combinations) == 0:
-            # self._log_warning("没有组合可求解")
             return []
         
         N = len(combinations)
-        # self._log_info(f"数据流程开始", f"输入{N}个组合 -> 目标24N={24*N}个最终候选解")
-        
-        # 输入数据详细日志
-        # self._log_debug("=== 输入数据详细分析 ===")
-        # self._log_array_detailed("输入combinations", combinations)
         
         # 第一层：扩展组合 N -> 6N
-        # self._log_debug("第一层: 组合扩展 N->6N")
         expanded_combinations = self._expand_combinations(combinations)  # (6N, 3, 2)
         
-        # 第一层数据详细日志
-        # self._log_debug("=== 第一层输出详细分析 ===")
-        # self._log_array_detailed("expanded_combinations", expanded_combinations)
-        
         # 第二-五层：计算phi 6N -> 6N
-        # self._log_debug("第二-五层: 计算phi 6N->6N")
         phi_h, phi_v, valid_phi_h, valid_phi_v = self._compute_phi_regularized(expanded_combinations)  # (6N, 2), (6N,)
         
-        # 第二-五层数据详细日志
-        # self._log_debug("=== 第二-五层输出详细分析 ===")
-        # self._log_array_detailed("phi_h", phi_h)
-        # self._log_array_detailed("phi_v", phi_v) 
-        # self._log_array_detailed("valid_phi_h", valid_phi_h)
-        # self._log_array_detailed("valid_phi_v", valid_phi_v)
+        valid_h_count = np.sum(valid_phi_h)
+        valid_v_count = np.sum(valid_phi_v)
         
         # 第六-七层：计算碰撞和关键量 6N -> 12N
-        # self._log_debug("第六-七层: 计算碰撞和关键量 6N->12N")
         colli_h, key_h, valid_phi_flat_h = self._compute_collision_and_key_h(phi_h, expanded_combinations, valid_phi_h)  # (12N, 3, 2), (12N, 4), (12N,)
         colli_v, key_v, valid_phi_flat_v = self._compute_collision_and_key_v(phi_v, expanded_combinations, valid_phi_v)  # (12N, 3, 2), (12N, 4), (12N,)
         
-        # 第六-七层数据详细日志
-        # self._log_debug("=== 第六-七层输出详细分析 ===")
-        # self._log_array_detailed("colli_h", colli_h)
-        # self._log_array_detailed("key_h", key_h)
-        # self._log_array_detailed("valid_phi_flat_h", valid_phi_flat_h)
-        # self._log_array_detailed("colli_v", colli_v)
-        # self._log_array_detailed("key_v", key_v)
-        # self._log_array_detailed("valid_phi_flat_v", valid_phi_flat_v)
-        
         # 第八层：求解 12N -> 12N
-        # self._log_debug("第八层: 求解 12N->12N")
         sols_h, valid_sol_h = self._solve_regularized_h(key_h, colli_h, phi_h, valid_phi_flat_h)  # (12N, 5), (12N,)
         sols_v, valid_sol_v = self._solve_regularized_v(key_v, colli_v, phi_v, valid_phi_flat_v)  # (12N, 5), (12N,)
         
-        # 第八层数据详细日志
-        # self._log_debug("=== 第八层输出详细分析 ===")
-        # self._log_array_detailed("sols_h", sols_h)
-        # self._log_array_detailed("valid_sol_h", valid_sol_h)
-        # self._log_array_detailed("sols_v", sols_v)
-        # self._log_array_detailed("valid_sol_v", valid_sol_v)
-        
         # 第九层：合并解 12N+12N -> 24N
-        # self._log_debug("第九层: 合并解 12N+12N->24N")
         final_sols, final_valid = self._merge_solutions_regularized(sols_h, sols_v, valid_sol_h, valid_sol_v, N)  # (24N, 5), (24N,)
         
-        # 第九层数据详细日志
-        # self._log_debug("=== 第九层最终输出详细分析 ===")
-        # self._log_array_detailed("final_sols", final_sols)
-        # self._log_array_detailed("final_valid", final_valid)
+        valid_total = np.sum(final_valid)
         
         return final_sols, final_valid
     
@@ -393,7 +356,7 @@ class Case3BatchSolver(BaseLog):
             key_v[valid_mask] = valid_key
         
         valid_count = np.sum(valid_phi_flat_v)
-        self._log_debug(f"第六-七层竖直完成: 生成{N_flat}个位置，有效{valid_count}个")
+        #self._log_debug(f"第六-七层竖直完成: 生成{N_flat}个位置，有效{valid_count}个")
         return colli_v, key_v, valid_phi_flat_v
         
     # ==================== 第八层：求解 12N->12N ====================
@@ -413,7 +376,7 @@ class Case3BatchSolver(BaseLog):
             - sols_h: 解数组 (12N, 5) - [x_min, x_max, y_min, y_max, phi]
             - valid_sol_h: 解有效掩码 (12N,)
         """
-        self._log_debug("第八层水平: 规则化求解")
+        #self._log_debug("第八层水平: 规则化求解")
         
         N_flat = len(key_h)  # 12N
         
@@ -522,7 +485,7 @@ class Case3BatchSolver(BaseLog):
             - sols_v: 解数组 (12N, 5) - [x_min, x_max, y_min, y_max, phi]
             - valid_sol_v: 解有效掩码 (12N,)
         """
-        self._log_debug("第八层竖直: 规则化求解")
+        #self._log_debug("第八层竖直: 规则化求解")
         
         N_flat = len(key_v)  # 12N
         
@@ -631,7 +594,7 @@ class Case3BatchSolver(BaseLog):
             - final_sols: 最终解数组 (24N, 5)
             - final_valid: 最终解有效掩码 (24N,)
         """
-        self._log_debug("第九层: 合并解")
+        #self._log_debug("第九层: 合并解")
         final_sol = np.full((N, 24, 5), np.inf, dtype=np.float64)
         final_valid = np.full((N, 24), -1, dtype=np.int32)  # 用-1表示无效索引
         

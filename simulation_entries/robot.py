@@ -20,6 +20,9 @@ class VirtualRobot:
         self.x = x
         self.y = y
         self.phi = phi
+
+        self.m = m
+        self.n = n
         
         # 环境配置（按你给的默认值）
         self.boundary_lines = boundary_lines or [
@@ -44,7 +47,7 @@ class VirtualRobot:
     
     def scan(self, 
             noise_type: str = 'gaussian', 
-            noise_scale: float = 0.1) -> Tuple[np.ndarray, np.ndarray]:
+            noise_scale: float = 0) -> Tuple[np.ndarray, np.ndarray]:
         """
         执行带噪声的激光扫描
         
@@ -97,7 +100,7 @@ class VirtualRobot:
         2. 计算射线与线段的数学交点
         3. 返回最小有效距离
         """
-        max_dist = 20.0
+        max_dist = np.sqrt(self.m**2 + self.n**2)  # 最大可能距离
         closest_dist = max_dist
         
         for (p1, p2) in self.boundary_lines:
