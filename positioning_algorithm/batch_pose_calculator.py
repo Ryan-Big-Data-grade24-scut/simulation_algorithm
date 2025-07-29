@@ -84,10 +84,13 @@ class PoseSolver(BaseLog):
         Returns:
             解列表 [((x_min, x_max), (y_min, y_max), phi), ...]
         """
+        try:
         # 验证输入
-        if len(distances) != len(self.laser_config):
-            raise ValueError(f"距离数组长度({len(distances)})与激光配置数量({len(self.laser_config)})不匹配")
-        
+            if len(distances) != len(self.laser_config):
+                raise ValueError(f"距离数组长度({len(distances)})与激光配置数量({len(self.laser_config)})不匹配")
+        except TypeError as e:
+            self._log_error(f"输入类型错误: {e}")
+            return []    
         # self.logger.info(f"开始求解: 距离={distances}")
         
         """
