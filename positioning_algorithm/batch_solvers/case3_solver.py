@@ -47,9 +47,9 @@ class Case3BatchSolver(BaseLog):
         Returns:
             List[Tuple]: 解列表，每个解为 ((x_min, x_max), (y_min, y_max), phi)
         """
-        # self._log_info("=" * 60)
-        # self._log_info("开始Case3批处理求解 - 规则化数据流程")
-        # self._log_info("=" * 60)
+        self._log_info("=" * 60)
+        self._log_info("开始Case3批处理求解 - 规则化数据流程")
+        self._log_info("=" * 60)
         
         # 输入验证和日志
         if len(combinations) == 0:
@@ -62,6 +62,8 @@ class Case3BatchSolver(BaseLog):
         
         # 第二-五层：计算phi 6N -> 6N
         phi_h, phi_v, valid_phi_h, valid_phi_v = self._compute_phi_regularized(expanded_combinations)  # (6N, 2), (6N,)
+        self._log_array_detailed("计算的phi_h", phi_h)
+        self._log_array_detailed("计算的phi_v", phi_v)
         
         valid_h_count = np.sum(valid_phi_h)
         valid_v_count = np.sum(valid_phi_v)
@@ -78,6 +80,8 @@ class Case3BatchSolver(BaseLog):
         final_sols, final_valid = self._merge_solutions_regularized(sols_h, sols_v, valid_sol_h, valid_sol_v, N)  # (24N, 5), (24N,)
         
         valid_total = np.sum(final_valid)
+
+        self._log_array_detailed("最终合并解", final_sols)
         
         return final_sols, final_valid
     

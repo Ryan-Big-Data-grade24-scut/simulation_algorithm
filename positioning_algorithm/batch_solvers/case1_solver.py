@@ -45,9 +45,9 @@ class Case1BatchSolver(BaseLog):
             np.ndarray: 解数组 (N, 5) - 每行为[xmin, xmax, ymin, ymax, phi]
                        无解的组合用np.inf填充
         """
-        # self._log_info("=" * 60)
-        # self._log_info("开始Case1批处理求解（规则化版本）")
-        # self._log_info("=" * 60)
+        self._log_info("=" * 60)
+        self._log_info("开始Case1批处理求解（规则化版本）")
+        self._log_info("=" * 60)
         
         # 输入验证和日志
         if len(combinations) == 0:
@@ -62,6 +62,9 @@ class Case1BatchSolver(BaseLog):
         ab_h, ab_v = self._compute_ab_coefficients(expanded)
         phi_h, valid_h = self._compute_phi_candidates_regularized(ab_h)
         phi_v, valid_v = self._compute_phi_candidates_regularized(ab_v)
+
+        self._log_array_detailed("水平边phi候选", phi_h)
+        self._log_array_detailed("竖直边phi候选", phi_v)
         
         valid_count_h = np.sum(valid_h)
         valid_count_v = np.sum(valid_v)
@@ -79,6 +82,8 @@ class Case1BatchSolver(BaseLog):
         
         # 最终统计
         valid_solutions = np.sum(~np.isinf(final_sol[:, :, 0]))
+
+        self._log_array_detailed("最终解", final_sol)
         
         return final_sol, final_valid
     

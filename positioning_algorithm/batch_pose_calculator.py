@@ -147,6 +147,8 @@ class PoseSolver(BaseLog):
             x_min, x_max, y_min, y_max, phi = sol[:5]
             results.append(((x_min, x_max), (y_min, y_max), phi))
         
+        self._log_array_detailed("最终筛选后的解", results)
+
         return results
     
     def _calculate_collision_vectors(self, distances: np.ndarray, valid_mask: np.ndarray) -> np.ndarray:
@@ -274,6 +276,7 @@ class PoseSolver(BaseLog):
             # 获取第i个组合中的有效解
             current_valid = valid_mask[i]
             current_solutions = solutions[i]
+            self._log_array_detailed(f"组合{i}的解", current_solutions)
             
             if not np.any(current_valid):
                 continue  # 跳过没有有效解的组合
@@ -455,6 +458,7 @@ class PoseSolver(BaseLog):
             # 输出处理完第i个组合后的完整筛选结果
             current_filtered = filtered_solutions[:filtered_count]
             # self._log_array_detailed(f"组合{i}筛选后的解", current_filtered)
+            self._log_array_detailed(f"组合{i}筛选后的解", current_filtered)
 
         # 提取有效的筛选结果
         final_filtered = filtered_solutions[:filtered_count]
@@ -467,7 +471,7 @@ class PoseSolver(BaseLog):
         final_filtered = final_filtered[sort_indices]
         
         # 日志：输出筛选后的解
-        # self._log_array_detailed("筛选后的解", final_filtered)
+        self._log_array_detailed("筛选后的解", final_filtered)
 
         # 如果最高相容组合数等于组合数N 则返回相容组合数等于N的解
         max_compatible_count = final_filtered[0, 5]
