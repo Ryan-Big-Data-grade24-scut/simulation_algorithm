@@ -29,7 +29,9 @@ class VirtualRobot:
             ((0, 0), (m, 0)),
             ((m, 0), (m, n)),
             ((m, n), (0, n)),
-            ((0, n), (0, 0))
+            ((0, n), (0, 0)), 
+            ((m/10, n*2/10), (m*2/10, n/10)),
+            ((m/10, n*3/10), (m*2/10, n*4/10)),
         ]
         
         # 激光配置（按你给的默认值）
@@ -47,7 +49,7 @@ class VirtualRobot:
     
     def scan(self, 
             noise_type: str = 'gaussian', 
-            noise_scale: float = 0) -> Tuple[np.ndarray, np.ndarray]:
+            noise_scale: float = 0.1) -> Tuple[np.ndarray, np.ndarray]:
         """
         执行带噪声的激光扫描
         

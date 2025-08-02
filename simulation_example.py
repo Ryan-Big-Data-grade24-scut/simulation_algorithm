@@ -2,7 +2,7 @@ import os
 import glob
 from simulation_entries.robot import VirtualRobot 
 from simulation_entries.visual import  RobotVisualizer
-from positioning_algorithm.batch_pose_calculator import PoseSolver
+from positioning_algorithm.angle_pose_calculator import PoseSolver
 from matplotlib import pyplot as plt
 import numpy as np
 
