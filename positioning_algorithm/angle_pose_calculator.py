@@ -5,7 +5,7 @@ from .batch_solvers.Base_log import BaseLog
 import logging
 
 class PoseSolver(BaseLog):
-    def __init__(self, m, n, laser_configs, config=None, Rcl_logger=None, tol=0.15, use_tolerance_checking=True):
+    def __init__(self, m, n, laser_configs, Rcl_logger=None, tol=0.15, use_tolerance_checking=True):
         super().__init__()
         self.m = m
         self.n = n
