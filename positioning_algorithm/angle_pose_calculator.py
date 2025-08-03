@@ -87,9 +87,9 @@ class PoseSolver(BaseLog):
         self._log_array_detailed("candidates", candidates)
         self._log_array_detailed("results_n", results_n)
         excluded_lasers = None
-        if len(results_n) > 0:
-            results = np.vstack([results, results_n]) if len(results) > 0 else results_n
-            excluded_lasers = np.array([]).reshape(len(results_n), 0)  # n情况下没有被排除的激光
+        if results_n.shape[0] > 0:
+            results = np.vstack([results, results_n]) if results.shape[0] > 0 else results_n
+            excluded_lasers = np.array([]).reshape(results_n.shape[0], 0)  # n情况下没有被排除的激光
             have_res = True
         if N_va < 2:
             self._log_warning("前面的计算没有结果，且有效激光束数量小于2")
@@ -99,8 +99,8 @@ class PoseSolver(BaseLog):
         if not have_res:
             results_n1, excluded_n1 = self._calculate_differences_n_1(candidates, N_va)
             self._log_array_detailed("results_n1", results_n1)
-            if len(results_n1) > 0:
-                results = np.vstack([results, results_n1]) if len(results) > 0 else results_n1
+            if results_n1.shape[0] > 0:
+                results = np.vstack([results, results_n1]) if results.shape[0] > 0 else results_n1
                 excluded_lasers = excluded_n1.reshape(-1, 1)  # 转换为列向量
                 have_res = True
             if N_va < 3:
@@ -112,8 +112,8 @@ class PoseSolver(BaseLog):
             results_n2, excluded_n2 = self._calculate_differences_n_2(candidates, N_va)
             self._log_array_detailed("results_n2", results_n2)
 
-            if len(results_n2) > 0:
-                results = np.vstack([results, results_n2]) if len(results) > 0 else results_n2
+            if results_n2.shape[0] > 0:
+                results = np.vstack([results, results_n2]) if results.shape[0] > 0 else results_n2
                 excluded_lasers = excluded_n2  # 已经是正确的形状 (n_results, 2)
                 have_res = True
         
@@ -125,7 +125,7 @@ class PoseSolver(BaseLog):
         final_results = self._calculate_final_results(results, collision_vectors, excluded_lasers)
 
         # 7. 返回结果
-        return final_results if len(final_results) > 0 else results
+        return final_results if final_results.shape[0] > 0 else results
     
     def _calculate_collision_vectors(self, distances: np.ndarray, valid_mask: np.ndarray, angle: float) -> Tuple[np.ndarray, np.ndarray]:
         """计算碰撞向量参数"""
@@ -370,7 +370,7 @@ class PoseSolver(BaseLog):
     
     def _calculate_final_results(self, results: np.ndarray, collision_vectors: np.ndarray, excluded_lasers: np.ndarray = None) -> np.ndarray:
         """计算最终结果，考虑被排除的激光束，使用批量计算优化"""
-        if len(results) == 0 or len(collision_vectors) == 0:
+        if results.shape[0] == 0 or collision_vectors.shape[0] == 0:
             return np.array([]).reshape(0, 2)
         
         # 如果没有排除的激光束（n情况），使用原始的批量方法
@@ -408,10 +408,10 @@ class PoseSolver(BaseLog):
             
             # 使用激活的激光束进行批量计算
             active_collision_vectors = collision_vectors[laser_mask]
-            if len(active_collision_vectors) > 0:
+            if active_collision_vectors.shape[0] > 0:
                 valid_pattern_results = self._calculate_final_results_batch(
                     pattern_results, active_collision_vectors, use_tolerance=self.use_tolerance_checking)
-                if len(valid_pattern_results) > 0:
+                if valid_pattern_results.shape[0] > 0:
                     valid_results.append(valid_pattern_results)
         
         return np.vstack(valid_results) if valid_results else np.array([]).reshape(0, 2)
